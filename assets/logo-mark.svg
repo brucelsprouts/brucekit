@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- brucekit app-icon mark — single "b" viewfinder, matches app-icon.png -->
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="#0a0b0d" />
+
+  <!-- corner tick framing -->
+  <g stroke="#9aa1a9" stroke-width="7" fill="none">
+    <path d="M36 111 V36 h75" />
+    <path d="M476 111 V36 h-75" />
+    <path d="M36 401 v75 h75" />
+    <path d="M476 401 v75 h-75" />
+  </g>
+
+  <!-- "b" -->
+  <g filter="url(#glow)">
+    <rect x="161" y="102" width="40" height="307" fill="#f4f6f8" />
+    <circle cx="281" cy="296" r="96" fill="none" stroke="#f4f6f8" stroke-width="43" />
+  </g>
+</svg>

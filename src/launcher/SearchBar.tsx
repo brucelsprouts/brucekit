@@ -1,13 +1,12 @@
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef } from "react";
 
 type Props = {
   value: string;
   onChange: (value: string) => void;
-  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   resultCount: number;
 };
 
-export function SearchBar({ value, onChange, onKeyDown, resultCount }: Props) {
+export function SearchBar({ value, onChange, resultCount }: Props) {
   const ref = useRef<HTMLInputElement>(null);
 
   // Autofocus on open (spec §6).
@@ -26,7 +25,6 @@ export function SearchBar({ value, onChange, onKeyDown, resultCount }: Props) {
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
         placeholder="search tools"
         spellCheck={false}
         autoComplete="off"

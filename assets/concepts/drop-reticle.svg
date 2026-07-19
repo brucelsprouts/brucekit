@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- "drop reticle" — capture crosshair with an eyedropper drop at center -->
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="#0a0b0d" />
+
+  <g stroke="#565d66" stroke-width="4" fill="none">
+    <path d="M56 100 V56 h44" />
+    <path d="M456 100 V56 h-44" />
+    <path d="M56 412 v44 h44" />
+    <path d="M456 412 v44 h-44" />
+  </g>
+
+  <g filter="url(#glow)">
+    <!-- reticle ring -->
+    <circle cx="256" cy="268" r="92" stroke="#f4f6f8" stroke-width="22" fill="none" />
+    <!-- crossing ticks -->
+    <g stroke="#f4f6f8" stroke-width="20" fill="none">
+      <path d="M256 134 V198" />
+      <path d="M326 268 H390" />
+      <path d="M256 338 V402" />
+      <path d="M122 268 H186" />
+    </g>
+    <!-- eyedropper drop -->
+    <path d="M256 226 C238 258 226 274 226 292 a30 30 0 0 0 60 0 C286 274 274 258 256 226 Z" fill="#f4f6f8" />
+  </g>
+</svg>

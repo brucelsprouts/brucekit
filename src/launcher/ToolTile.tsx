@@ -25,11 +25,6 @@ export function ToolTile({ tool, selected, onSelect, onHover }: Props) {
         <Icon size={26} />
       </span>
       <span className="bk-tile__name">{tool.name}</span>
-      {tool.kind === "panel" && (
-        <span className="bk-tile__kind" aria-hidden="true">
-          PANEL
-        </span>
-      )}
     </button>
   );
 }

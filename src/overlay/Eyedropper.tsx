@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useRef, useState, type MouseEvent, type RefObject } from "react";
 import { emit } from "@tauri-apps/api/event";
-import { invoke, errorMessage, type CaptureFrame, type Rgb } from "../core/ipc";
+import { invoke, errorMessage, type CaptureMeta, type Rgb } from "../core/ipc";
 import { toast } from "../core/toast";
 import { EV_COLOR_PICKED, endCapture, restoreLauncher } from "../core/overlay";
 import { rgbToHex } from "../tools/color-picker/color";
@@ -8,39 +8,31 @@ import { rgbToHex } from "../tools/color-picker/color";
 const LOUPE_PX = 132;
 const CELLS = 15; // odd, so there is a centered pixel
 
+type Props = {
+  meta: CaptureMeta;
+  /** Frozen frame at native size, rasterized once by the overlay. */
+  srcRef: RefObject<HTMLCanvasElement | null>;
+};
+
 /** Color picker (spec §11): magnifier loupe + live readout over the frozen frame. */
-export function Eyedropper({ frame }: { frame: CaptureFrame }) {
-  const srcRef = useRef<HTMLCanvasElement | null>(null); // frozen frame at native size
+export function Eyedropper({ meta, srcRef }: Props) {
   const loupeRef = useRef<HTMLCanvasElement | null>(null);
   const [pos, setPos] = useState<Pt | null>(null);
   const [rgb, setRgb] = useState<Rgb | null>(null);
   const busy = useRef(false);
 
-  // Rasterize the frozen frame once for instant local sampling.
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement("canvas");
-      c.width = frame.width;
-      c.height = frame.height;
-      c.getContext("2d")?.drawImage(img, 0, 0, frame.width, frame.height);
-      srcRef.current = c;
-    };
-    img.src = frame.dataUrl;
-  }, [frame]);
-
   function toPhysical(clientX: number, clientY: number): Pt {
     return {
-      x: Math.floor((clientX * frame.width) / window.innerWidth),
-      y: Math.floor((clientY * frame.height) / window.innerHeight),
+      x: Math.floor((clientX * meta.width) / window.innerWidth),
+      y: Math.floor((clientY * meta.height) / window.innerHeight),
     };
   }
 
   function sample(px: number, py: number): Rgb | null {
     const g = srcRef.current?.getContext("2d", { willReadFrequently: true });
     if (!g) return null;
-    const x = Math.max(0, Math.min(frame.width - 1, px));
-    const y = Math.max(0, Math.min(frame.height - 1, py));
+    const x = Math.max(0, Math.min(meta.width - 1, px));
+    const y = Math.max(0, Math.min(meta.height - 1, py));
     const d = g.getImageData(x, y, 1, 1).data;
     return { r: d[0], g: d[1], b: d[2] };
   }
@@ -54,7 +46,11 @@ export function Eyedropper({ frame }: { frame: CaptureFrame }) {
     g.clearRect(0, 0, LOUPE_PX, LOUPE_PX);
     g.drawImage(src, px - half, py - half, CELLS, CELLS, 0, 0, LOUPE_PX, LOUPE_PX);
     const cell = LOUPE_PX / CELLS;
-    g.strokeStyle = "rgba(77, 224, 176, 0.95)";
+    // Dark halo + white ring: readable over any pixel color.
+    g.strokeStyle = "rgba(0, 0, 0, 0.8)";
+    g.lineWidth = 3;
+    g.strokeRect(half * cell + 0.5, half * cell + 0.5, cell - 1, cell - 1);
+    g.strokeStyle = "rgba(255, 255, 255, 0.95)";
     g.lineWidth = 1.5;
     g.strokeRect(half * cell + 0.5, half * cell + 0.5, cell - 1, cell - 1);
   }
@@ -80,6 +76,7 @@ export function Eyedropper({ frame }: { frame: CaptureFrame }) {
     } finally {
       await restoreLauncher();
       await endCapture();
+      busy.current = false;
     }
   }
 

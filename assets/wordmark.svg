@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 160" width="960" height="160">
+  <!-- brucekit wordmark — spaced monospace capitals with corner ticks -->
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="960" height="160" fill="#0a0b0d" />
+
+  <!-- flanking tick brackets -->
+  <g stroke="#565d66" stroke-width="3" fill="none">
+    <path d="M28 56 V28 h28" />
+    <path d="M28 104 v28 h28" />
+    <path d="M932 56 V28 h-28" />
+    <path d="M932 104 v28 h-28" />
+  </g>
+
+  <text
+    x="480"
+    y="80"
+    text-anchor="middle"
+    dominant-baseline="central"
+    font-family="'JetBrains Mono', 'Cascadia Code', Consolas, 'Courier New', monospace"
+    font-size="64"
+    font-weight="600"
+    letter-spacing="22"
+    fill="#f4f6f8"
+    filter="url(#glow)"
+  >BRUCEKIT</text>
+</svg>

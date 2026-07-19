@@ -86,7 +86,7 @@ export function Settings({ onClose }: Props) {
         <button type="button" className="bk-back" onClick={onClose} aria-label="Close settings">
           ← BACK
         </button>
-        <span className="bk-host__title">Settings</span>
+        <span className="bk-host__title">{"// Settings"}</span>
       </header>
 
       <div className="bk-settings__body">

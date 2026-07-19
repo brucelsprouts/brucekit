@@ -1,8 +1,8 @@
 import { useRef, useState, type MouseEvent } from "react";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { invoke, errorMessage, type CaptureFrame, type Rect } from "../core/ipc";
-import { toast } from "../core/toast";
-import { endCapture } from "../core/overlay";
+import { emit } from "@tauri-apps/api/event";
+import { invoke, errorMessage, type CaptureMeta, type Rect } from "../core/ipc";
+import { EV_OCR_DONE, type OcrDonePayload } from "../core/events";
+import { endCapture, restoreLauncher } from "../core/overlay";
 
 type Pt = { x: number; y: number };
 
@@ -13,8 +13,12 @@ const normalize = (a: Pt, b: Pt) => ({
   height: Math.abs(a.y - b.y),
 });
 
-/** OCR grab (spec §10): drag a rectangle over the frozen frame, then Rust crops + OCRs it. */
-export function RegionSelect({ frame }: { frame: CaptureFrame }) {
+/**
+ * OCR grab (spec §10): drag a rectangle over the frozen frame, Rust crops +
+ * OCRs it, and the result is handed back to the launcher's OCR panel — which
+ * reopens to show the text (and copies it to the clipboard).
+ */
+export function RegionSelect({ meta }: { meta: CaptureMeta }) {
   const [start, setStart] = useState<Pt | null>(null);
   const [cur, setCur] = useState<Pt | null>(null);
   const busy = useRef(false);
@@ -39,8 +43,8 @@ export function RegionSelect({ frame }: { frame: CaptureFrame }) {
 
     busy.current = true;
     // Map logical CSS pixels to physical frame pixels (DPI-safe).
-    const sx = frame.width / window.innerWidth;
-    const sy = frame.height / window.innerHeight;
+    const sx = meta.width / window.innerWidth;
+    const sy = meta.height / window.innerHeight;
     const rect: Rect = {
       x: Math.round(sel.x * sx),
       y: Math.round(sel.y * sy),
@@ -48,22 +52,20 @@ export function RegionSelect({ frame }: { frame: CaptureFrame }) {
       height: Math.round(sel.height * sy),
     };
 
+    let payload: OcrDonePayload;
     try {
-      const text = (await invoke("ocr_region", { rect })).trim();
-      if (text) {
-        await writeText(text);
-        toast(`Copied ${text.length} character${text.length === 1 ? "" : "s"}`, {
-          kind: "success",
-        });
-      } else {
-        toast("No text found", { kind: "info" });
-      }
+      payload = { text: await invoke("ocr_region", { rect }) };
     } catch (err) {
-      toast(errorMessage(err), { kind: "error" });
-    } finally {
-      // Let the toast land, then drop the overlay (spec §10 flow tail).
-      window.setTimeout(() => void endCapture(), 950);
+      payload = { text: "", error: errorMessage(err) };
     }
+    try {
+      await emit(EV_OCR_DONE, payload);
+    } catch {
+      /* launcher just won't hear about it */
+    }
+    await restoreLauncher();
+    await endCapture();
+    busy.current = false;
   }
 
   return (

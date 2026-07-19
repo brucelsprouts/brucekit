@@ -18,7 +18,7 @@ export async function endCapture(): Promise<void> {
   await invoke("cancel_capture");
 }
 
-/** Bring the launcher back to the foreground (used after a color pick). */
+/** Bring the launcher back to the foreground (after a pick, scan, or abort). */
 export async function restoreLauncher(): Promise<void> {
   const launcher = await Window.getByLabel("launcher");
   if (launcher) {

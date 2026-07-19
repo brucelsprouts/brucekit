@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- "instrument b" — the b's bowl becomes a lens/reticle with ticks + center dot -->
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="#0a0b0d" />
+
+  <g stroke="#565d66" stroke-width="4" fill="none">
+    <path d="M56 100 V56 h44" />
+    <path d="M456 100 V56 h-44" />
+    <path d="M56 412 v44 h44" />
+    <path d="M456 412 v44 h-44" />
+  </g>
+
+  <g filter="url(#glow)">
+    <!-- stem -->
+    <path d="M188 118 V388" stroke="#f4f6f8" stroke-width="36" stroke-linecap="square" fill="none" />
+    <!-- bowl as lens ring -->
+    <circle cx="308" cy="304" r="86" stroke="#f4f6f8" stroke-width="32" fill="none" />
+    <!-- reticle ticks -->
+    <g stroke="#f4f6f8" stroke-width="10" fill="none">
+      <path d="M308 190 V164" />
+      <path d="M422 304 H448" />
+      <path d="M308 418 V444" />
+    </g>
+    <!-- sampled pixel -->
+    <circle cx="308" cy="304" r="12" fill="#f4f6f8" />
+  </g>
+</svg>

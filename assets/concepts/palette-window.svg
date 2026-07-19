@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- "palette window" — the launcher itself: prompt chevron + a grid of tool dots -->
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="#0a0b0d" />
+
+  <g stroke="#565d66" stroke-width="4" fill="none">
+    <path d="M56 100 V56 h44" />
+    <path d="M456 100 V56 h-44" />
+    <path d="M56 412 v44 h44" />
+    <path d="M456 412 v44 h-44" />
+  </g>
+
+  <g filter="url(#glow)">
+    <!-- palette window -->
+    <rect x="136" y="160" width="240" height="192" rx="10" stroke="#f4f6f8" stroke-width="16" fill="none" />
+    <!-- prompt chevron + caret -->
+    <path d="M172 198 L194 216 L172 234" stroke="#f4f6f8" stroke-width="12" stroke-linecap="square" fill="none" />
+    <path d="M212 234 h30" stroke="#f4f6f8" stroke-width="12" fill="none" />
+    <!-- tool grid -->
+    <g fill="#f4f6f8">
+      <circle cx="196" cy="282" r="11" />
+      <circle cx="256" cy="282" r="11" />
+      <circle cx="316" cy="282" r="11" />
+      <circle cx="196" cy="318" r="11" />
+      <circle cx="256" cy="318" r="11" />
+      <circle cx="316" cy="318" r="11" />
+    </g>
+  </g>
+</svg>

@@ -1,30 +1,22 @@
 import type { ToolModule } from "../types";
-import { errorMessage } from "../../core/ipc";
-import { launchCapture } from "../../core/overlay";
 import { OcrIcon } from "./icon";
+import { OcrPanel } from "./OcrPanel";
 
 /**
- * OCR grab (spec §10) — an `action` tool.
- *
- * Selecting the tile closes the launcher and starts the freeze-frame flow: Rust
- * snapshots the active monitor, the overlay shows the frozen frame with a
- * crosshair, the user drags a rectangle, and the cropped region is OCR'd to the
- * clipboard. All heavy lifting is async Rust; this module only kicks it off.
+ * OCR grab (spec §10) — a `panel` tool. Selecting the tile opens the OCR
+ * screen; "Scan region" hides the launcher and starts the freeze-frame flow
+ * (Rust snapshots the monitor, the overlay takes a drag), then the launcher
+ * reopens here with the recognized text shown and copied to the clipboard.
  */
 const ocrGrab: ToolModule = {
   id: "ocr-grab",
   name: "OCR grab",
-  description: "Drag a box to copy on-screen text",
+  description: "Scan a screen region into text",
   keywords: ["ocr", "text", "recognize", "screenshot", "scan", "copy"],
   icon: OcrIcon,
-  kind: "action",
-  async activate(ctx) {
-    ctx.closeLauncher();
-    try {
-      await launchCapture("ocr");
-    } catch (err) {
-      ctx.toast(errorMessage(err), { kind: "error" });
-    }
+  kind: "panel",
+  render(ctx) {
+    return <OcrPanel ctx={ctx} />;
   },
 };
 

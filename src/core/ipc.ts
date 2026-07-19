@@ -12,7 +12,11 @@ export type Rgb = { r: number; g: number; b: number };
 
 export type CaptureMode = "ocr" | "color";
 export type CaptureDims = { width: number; height: number };
-export type CaptureFrame = CaptureDims & { dataUrl: string; mode: CaptureMode };
+export type CaptureMeta = CaptureDims & {
+  mode: CaptureMode;
+  /** Monotonic capture id — keys per-session overlay state across window reuse. */
+  seq: number;
+};
 
 export type Config = {
   hotkey: string;
@@ -23,8 +27,10 @@ export type Config = {
 type CommandMap = {
   /** Freeze the monitor under the cursor into Rust memory and show the overlay. */
   capture_monitor: { args: { mode: CaptureMode }; result: CaptureDims };
-  /** Overlay pulls the frozen frame (as a data URL) + active mode on mount. */
-  get_capture: { args: void; result: CaptureFrame };
+  /** Overlay pulls the frozen frame's metadata on each capture-ready signal. */
+  get_capture: { args: void; result: CaptureMeta };
+  /** Raw RGBA8 pixels of the frozen frame (bytes over IPC, painted to canvas). */
+  get_capture_pixels: { args: void; result: ArrayBuffer };
   /** Crop the frozen frame to `rect`, OCR it, return recognized text. */
   ocr_region: { args: { rect: Rect }; result: string };
   /** Read one pixel from the frozen frame. */

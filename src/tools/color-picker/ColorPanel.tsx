@@ -4,6 +4,7 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { ToolContext } from "../types";
 import { errorMessage, type Rgb } from "../../core/ipc";
 import { EV_COLOR_PICKED, launchCapture } from "../../core/overlay";
+import { ColorIcon } from "./icon";
 import {
   COLOR_FORMATS,
   formatColor,
@@ -12,7 +13,7 @@ import {
   type ColorFormat,
 } from "./color";
 
-const DEFAULT_COLOR: Rgb = { r: 77, g: 224, b: 176 };
+const DEFAULT_COLOR: Rgb = { r: 255, g: 255, b: 255 };
 const CHANNELS: Array<keyof Rgb> = ["r", "g", "b"];
 
 /**
@@ -133,6 +134,11 @@ export function ColorPanel({ ctx }: { ctx: ToolContext }) {
 
   return (
     <div className="bk-colorpanel">
+      <button type="button" className="bk-action" onClick={eyedrop}>
+        <ColorIcon size={18} />
+        <span>Eyedrop from screen</span>
+      </button>
+
       <div className="bk-seg" role="group" aria-label="Color format">
         {COLOR_FORMATS.map((f) => (
           <button
@@ -157,6 +163,13 @@ export function ColorPanel({ ctx }: { ctx: ToolContext }) {
           <span className="bk-label">VALUE</span>
           <code className="bk-mono-value">{value}</code>
         </div>
+        <button
+          type="button"
+          className="bk-btn bk-colorpanel__copy"
+          onClick={copyCurrent}
+        >
+          Copy
+        </button>
       </div>
 
       <div className="bk-picker">
@@ -191,14 +204,6 @@ export function ColorPanel({ ctx }: { ctx: ToolContext }) {
         </div>
       </div>
 
-      <div className="bk-colorpanel__actions">
-        <button type="button" className="bk-btn" onClick={copyCurrent}>
-          Copy
-        </button>
-        <button type="button" className="bk-btn bk-btn--accent" onClick={eyedrop}>
-          Eyedrop
-        </button>
-      </div>
     </div>
   );
 }

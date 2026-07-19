@@ -25,7 +25,6 @@ thiserror = "2"
 
 image = "0.25"
 xcap = "0.0.14"
-base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
@@ -42,3 +41,9 @@ features = [
 opt-level = "s"
 lto = true
 strip = true
+
+# Dependencies at real optimization even in `tauri dev`: the capture pipeline
+# (xcap's DXGI copy, image crops, OCR bitmap shuffling) is unusably slow at
+# opt-level 0. Our own crate stays unoptimized for fast rebuilds.
+[profile.dev.package."*"]
+opt-level = 2

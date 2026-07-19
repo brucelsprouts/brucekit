@@ -75,6 +75,42 @@ code {
   border-color: var(--bk-accent-line);
   color: var(--bk-accent);
   background: var(--bk-accent-soft);
+  box-shadow: var(--bk-glow);
+  text-shadow: var(--bk-text-glow);
+}
+
+/* primary action — the one big control in a panel that does the thing */
+.bk-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bk-accent-soft);
+  border: 1px solid var(--bk-accent-line);
+  border-radius: var(--bk-radius);
+  color: var(--bk-accent);
+  font-size: var(--bk-fs-base);
+  font-weight: 600;
+  letter-spacing: var(--bk-tracking);
+  text-transform: uppercase;
+  box-shadow: var(--bk-glow);
+  text-shadow: var(--bk-text-glow);
+  transition: background var(--bk-fast) ease, border-color var(--bk-fast) ease,
+    box-shadow var(--bk-fast) ease;
+}
+.bk-action:hover:not(:disabled) {
+  background: rgba(244, 246, 248, 0.13);
+  border-color: var(--bk-accent);
+}
+.bk-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.bk-action svg {
+  flex-shrink: 0;
+  filter: var(--bk-icon-glow);
 }
 
 .bk-swatch {
@@ -168,10 +204,44 @@ code {
   gap: var(--bk-gap);
 }
 
+/* system status strip — machine-readout header chrome */
+.bk-sysbar {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 2px 2px 8px;
+  border-bottom: 1px solid var(--bk-line);
+  font-size: var(--bk-fs-label);
+  letter-spacing: var(--bk-tracking);
+  text-transform: uppercase;
+  color: var(--bk-fg-faint);
+}
+.bk-sysbar__id {
+  color: var(--bk-fg);
+  text-shadow: var(--bk-text-glow);
+}
+
+/* comment-style section divider: // MODULES */
+.bk-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--bk-fs-label);
+  letter-spacing: var(--bk-tracking);
+  text-transform: uppercase;
+  color: var(--bk-fg-faint);
+}
+.bk-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--bk-line);
+}
+
 .bk-launcher__hint {
   display: flex;
   gap: 16px;
-  padding-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bk-line);
   font-size: var(--bk-fs-label);
   letter-spacing: var(--bk-tracking);
   color: var(--bk-fg-faint);
@@ -193,6 +263,7 @@ code {
 .bk-search__prompt {
   color: var(--bk-accent);
   font-weight: 700;
+  text-shadow: var(--bk-text-glow);
 }
 .bk-search__input {
   flex: 1;
@@ -270,9 +341,14 @@ code {
   border-color: var(--bk-accent-line);
   color: var(--bk-fg);
   background: var(--bk-tile-bg-hover);
+  box-shadow: var(--bk-glow);
 }
 .bk-tile.is-selected .bk-tile__icon {
   color: var(--bk-accent);
+  filter: var(--bk-icon-glow);
+}
+.bk-tile.is-selected .bk-tile__name {
+  text-shadow: var(--bk-text-glow);
 }
 .bk-tile__icon {
   color: inherit;
@@ -283,14 +359,6 @@ code {
   letter-spacing: 0.02em;
   text-align: center;
   color: var(--bk-fg);
-}
-.bk-tile__kind {
-  position: absolute;
-  bottom: 5px;
-  right: 6px;
-  font-size: 8px;
-  letter-spacing: 0.12em;
-  color: var(--bk-fg-faint);
 }
 .bk-tile__tick {
   position: absolute;
@@ -387,6 +455,7 @@ code {
 .bk-seg__btn.is-active {
   background: var(--bk-accent-soft);
   color: var(--bk-accent);
+  text-shadow: var(--bk-text-glow);
 }
 
 .bk-colorpanel__readout {
@@ -405,9 +474,9 @@ code {
   color: var(--bk-fg);
   user-select: text;
 }
-.bk-colorpanel__actions {
-  display: flex;
-  gap: var(--bk-gap);
+.bk-colorpanel__copy {
+  margin-left: auto;
+  align-self: center;
 }
 
 /* manual picker: hex field + R/G/B sliders */
@@ -440,6 +509,7 @@ code {
 .bk-hexinput:focus {
   outline: none;
   border-color: var(--bk-accent-line);
+  box-shadow: var(--bk-glow);
 }
 .bk-sliders {
   display: flex;
@@ -467,6 +537,52 @@ code {
   height: 3px;
   accent-color: var(--bk-accent);
   cursor: pointer;
+}
+
+/* ---------------------------------------------------------- ocr panel */
+.bk-ocrpanel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bk-ocrpanel__status {
+  padding: 0 2px;
+}
+.bk-ocrpanel__resultbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.bk-ocrpanel__result {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bk-ocrpanel__text {
+  flex: 1;
+  min-height: 120px;
+  padding: 10px 12px;
+  background: var(--bk-bg-elev);
+  border: 1px solid var(--bk-line);
+  border-radius: var(--bk-radius);
+  color: var(--bk-fg);
+  font-family: var(--bk-font-mono);
+  font-size: var(--bk-fs-sm);
+  line-height: 1.55;
+  resize: none;
+  outline: none;
+  user-select: text;
+  cursor: text;
+}
+.bk-ocrpanel__text::placeholder {
+  color: var(--bk-fg-faint);
+}
+.bk-ocrpanel__text:focus {
+  border-color: var(--bk-accent-line);
+  box-shadow: var(--bk-glow);
 }
 
 /* ------------------------------------------------------ tool crash */
@@ -514,6 +630,7 @@ code {
   color: var(--bk-accent);
   font-size: var(--bk-fs-base);
   letter-spacing: 0.04em;
+  text-shadow: var(--bk-text-glow);
 }
 .bk-toggle {
   display: flex;
@@ -523,10 +640,39 @@ code {
   color: var(--bk-fg-dim);
   cursor: pointer;
 }
+/* custom monochrome checkbox: hairline square, white fill when armed */
 .bk-toggle input {
-  accent-color: var(--bk-accent);
+  appearance: none;
+  -webkit-appearance: none;
   width: 15px;
   height: 15px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bk-bg-elev);
+  border: 1px solid var(--bk-line-bright);
+  border-radius: var(--bk-radius);
+  cursor: pointer;
+  transition: border-color var(--bk-fast) ease, background var(--bk-fast) ease;
+}
+.bk-toggle input:hover {
+  border-color: var(--bk-fg-faint);
+}
+.bk-toggle input:checked {
+  border-color: var(--bk-accent-line);
+  background: var(--bk-accent-soft);
+  box-shadow: var(--bk-glow);
+}
+.bk-toggle input:checked::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: var(--bk-accent);
+  box-shadow: var(--bk-text-glow);
+}
+.bk-toggle input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .bk-toollist {
   list-style: none;
@@ -604,6 +750,7 @@ code {
 }
 .bk-toast--success .bk-toast__bar {
   background: var(--bk-accent);
+  box-shadow: var(--bk-text-glow);
 }
 .bk-toast--error .bk-toast__bar {
   background: var(--bk-danger);
@@ -621,7 +768,10 @@ code {
   inset: 0;
   height: 100vh;
   width: 100vw;
-  background-color: #000;
+  /* Transparent, not black: while the frozen frame decodes, the live desktop
+     shows through — and the frame is pixel-identical to it, so the freeze is
+     seamless instead of a fullscreen black flash. */
+  background-color: transparent;
   background-size: 100% 100%;
   background-repeat: no-repeat;
   cursor: crosshair;
@@ -635,6 +785,14 @@ code {
   justify-content: center;
   background: rgba(0, 0, 0, 0.8);
   cursor: default;
+}
+
+/* frozen-frame backdrop: raw pixels painted at native size, CSS-scaled */
+.bk-overlay__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .bk-region,
@@ -663,7 +821,7 @@ code {
 .bk-region__box {
   position: absolute;
   border: 1px solid var(--bk-accent);
-  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45), 0 0 16px rgba(255, 255, 255, 0.28);
 }
 .bk-region__dims {
   position: absolute;
@@ -671,7 +829,7 @@ code {
   left: 0;
   padding: 2px 6px;
   background: var(--bk-accent);
-  color: #04120c;
+  color: #0a0b0d;
   font-size: var(--bk-fs-label);
   letter-spacing: 0.06em;
   border-radius: 1px;

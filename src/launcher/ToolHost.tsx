@@ -34,7 +34,7 @@ export function ToolHost({ tool, ctx, onBack }: Props) {
         <button type="button" className="bk-back" onClick={onBack} aria-label="Back to tools">
           ← BACK
         </button>
-        <span className="bk-host__title">{tool.name}</span>
+        <span className="bk-host__title">{"// "}{tool.name}</span>
       </header>
       <div className="bk-host__body">
         <ErrorBoundary toolId={tool.id}>{body}</ErrorBoundary>

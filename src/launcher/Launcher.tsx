@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { search } from "../tools/registry";
@@ -94,14 +88,19 @@ export function Launcher() {
 
   // Dismiss on blur / click-away (spec §3.1).
   useEffect(() => {
-    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (!focused) {
-        setSettingsOpen(false);
-        void closeLauncher();
-      }
-    });
+    let unlisten: Promise<() => void> | null = null;
+    try {
+      unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+        if (!focused) {
+          setSettingsOpen(false);
+          void closeLauncher();
+        }
+      });
+    } catch {
+      /* outside a Tauri webview (browser preview) — no focus tracking */
+    }
     return () => {
-      unlisten.then((off) => off()).catch(() => {});
+      unlisten?.then((off) => off()).catch(() => {});
     };
   }, [closeLauncher]);
 
@@ -125,31 +124,38 @@ export function Launcher() {
     return () => disposers.forEach((d) => d());
   }, []);
 
-  function onSearchKey(e: KeyboardEvent<HTMLInputElement>) {
-    if (results.length === 0) return;
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        setSelected((s) => clamp(s + GRID_COLS, 0, results.length - 1));
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        setSelected((s) => clamp(s - GRID_COLS, 0, results.length - 1));
-        break;
-      case "ArrowRight":
-        e.preventDefault();
-        setSelected((s) => clamp(s + 1, 0, results.length - 1));
-        break;
-      case "ArrowLeft":
-        e.preventDefault();
-        setSelected((s) => clamp(s - 1, 0, results.length - 1));
-        break;
-      case "Enter":
-        e.preventDefault();
-        dispatchTool(results[selected] ?? results[0]);
-        break;
+  // Grid navigation at window level so ↵ / arrows work even when the search
+  // box has lost focus (footer hints must never lie).
+  useEffect(() => {
+    if (settingsOpen || activeTool) return;
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (results.length === 0) return;
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          setSelected((s) => clamp(s + GRID_COLS, 0, results.length - 1));
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          setSelected((s) => clamp(s - GRID_COLS, 0, results.length - 1));
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          setSelected((s) => clamp(s + 1, 0, results.length - 1));
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          setSelected((s) => clamp(s - 1, 0, results.length - 1));
+          break;
+        case "Enter":
+          e.preventDefault();
+          dispatchTool(results[selected] ?? results[0]);
+          break;
+      }
     }
-  }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [settingsOpen, activeTool, results, selected, dispatchTool]);
 
   return (
     <div className="bk-launcher" data-window="launcher">
@@ -157,6 +163,10 @@ export function Launcher() {
       <span className="bk-frame bk-frame--tr" aria-hidden="true" />
       <span className="bk-frame bk-frame--bl" aria-hidden="true" />
       <span className="bk-frame bk-frame--br" aria-hidden="true" />
+
+      <header className="bk-sysbar" aria-hidden="true">
+        <span className="bk-sysbar__id">BRUCEKIT</span>
+      </header>
 
       {settingsOpen ? (
         <Settings onClose={() => setSettingsOpen(false)} />
@@ -171,7 +181,6 @@ export function Launcher() {
                 setQuery(v);
                 setSelected(0);
               }}
-              onKeyDown={onSearchKey}
               resultCount={results.length}
             />
             <button
@@ -184,6 +193,9 @@ export function Launcher() {
               <GearIcon />
             </button>
           </div>
+          <div className="bk-divider" aria-hidden="true">
+            <span>{"// MODULES"}</span>
+          </div>
           <ToolGrid
             tools={results}
             selectedIndex={selected}
@@ -191,9 +203,9 @@ export function Launcher() {
             onHover={setSelected}
           />
           <footer className="bk-launcher__hint">
-            <span>↵ launch</span>
-            <span>↑↓←→ move</span>
-            <span>esc close</span>
+            <span>[↵] launch</span>
+            <span>[↑↓←→] move</span>
+            <span>[esc] close</span>
           </footer>
         </>
       )}
