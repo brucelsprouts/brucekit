@@ -1,0 +1,50 @@
+/*
+ * brucekit design tokens — black-and-white technical HUD.
+ * Terminal / sci-fi interface minimalism (matches brucelsprouts.com):
+ * monospace type, near-black ground, hairline borders, one restrained accent.
+ */
+
+:root {
+  /* Surfaces (near-black, layered) */
+  --bk-bg: #0a0b0d;
+  --bk-bg-elev: #0e1013;
+  --bk-panel: #0c0e11;
+  --bk-tile-bg: #101317;
+  --bk-tile-bg-hover: #14181d;
+
+  /* Foreground (light gray → white) */
+  --bk-fg: #e7e9ec;
+  --bk-fg-dim: #9aa1a9;
+  --bk-fg-faint: #565d66;
+
+  /* Lines — hairline (1px) borders and tick framing */
+  --bk-line: #21252b;
+  --bk-line-bright: #313842;
+
+  /* Single restrained signal accent */
+  --bk-accent: #4de0b0;
+  --bk-accent-soft: rgba(77, 224, 176, 0.14);
+  --bk-accent-line: rgba(77, 224, 176, 0.55);
+  --bk-danger: #ff6b6b;
+
+  /* Type */
+  --bk-font-mono: "JetBrains Mono", "Cascadia Code", "SF Mono", ui-monospace,
+    "Segoe UI Mono", Consolas, Menlo, monospace;
+  --bk-fs-label: 10px;
+  --bk-fs-sm: 12px;
+  --bk-fs-base: 13px;
+  --bk-fs-lg: 15px;
+  --bk-tracking: 0.08em;
+
+  /* Geometry */
+  --bk-radius: 2px;
+  --bk-gap: 8px;
+  --bk-pad: 14px;
+  --bk-tile: 104px;
+
+  /* Effects */
+  --bk-shadow: 0 24px 70px rgba(0, 0, 0, 0.62), 0 2px 0 rgba(0, 0, 0, 0.4);
+  --bk-scanline: rgba(255, 255, 255, 0.018);
+  --bk-fast: 90ms;
+  --bk-med: 150ms;
+}

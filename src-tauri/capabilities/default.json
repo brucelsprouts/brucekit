@@ -1,0 +1,24 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the launcher and overlay windows.",
+  "windows": ["launcher", "overlay"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-center",
+    "core:window:allow-is-visible",
+    "core:webview:allow-create-webview-window",
+    "core:event:default",
+    "store:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
+    "global-shortcut:default",
+    "autostart:default"
+  ]
+}

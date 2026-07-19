@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+dist-ssr/
+
+# rust / tauri
+src-tauri/target/
+src-tauri/gen/
+
+# generated icon source (regenerate with `npm run gen:icon`)
+app-icon.png
+
+# logs / os
+*.log
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
