@@ -30,10 +30,10 @@ pub const MODULE_ID: &str = "dcheck";
 pub const EV_PING: &str = "brucekit://ping";
 
 const LOG_FILE: &str = "ping_log.jsonl";
-/// Keep 7 days of history (matches the original app).
-const RETAIN_MS: i64 = 7 * 24 * 60 * 60 * 1000;
-/// Hard cap so a 1-second interval can't grow memory without bound.
-const MAX_ENTRIES: usize = 200_000;
+/// History is kept for all time — the jsonl log is never pruned by age. This
+/// cap only bounds what is held in memory for the graph: ~58 days at the
+/// default 5 s interval (~24 MB), oldest dropped first.
+const MAX_ENTRIES: usize = 1_000_000;
 const PING_TIMEOUT_MS: u32 = 2000;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -110,8 +110,8 @@ fn log_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     app.path().app_data_dir().ok().map(|d| d.join(LOG_FILE))
 }
 
-/// Load the jsonl log once per app run, pruning entries past the retention
-/// window (rewriting the file if anything was pruned, like the original).
+/// Load the jsonl log once per app run. Nothing is pruned by age — the log
+/// tracks for all time; only the in-memory tail is capped for the graph.
 fn ensure_loaded<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<DcheckState>();
     let mut loaded = state.loaded.lock().unwrap();
@@ -123,25 +123,13 @@ fn ensure_loaded<R: Runtime>(app: &AppHandle<R>) {
     let Some(path) = log_path(app) else { return };
     let Ok(raw) = fs::read_to_string(&path) else { return };
 
-    let cutoff = now_ms() - RETAIN_MS;
     let mut entries: Vec<PingEntry> = raw
         .lines()
         .filter_map(|l| serde_json::from_str::<PingEntry>(l).ok())
         .collect();
-    let before = entries.len();
-    entries.retain(|e| e.ts >= cutoff);
     if entries.len() > MAX_ENTRIES {
         let excess = entries.len() - MAX_ENTRIES;
         entries.drain(..excess);
-    }
-
-    if entries.len() < before {
-        let pruned: String = entries
-            .iter()
-            .filter_map(|e| serde_json::to_string(e).ok())
-            .map(|l| l + "\n")
-            .collect();
-        let _ = fs::write(&path, pruned);
     }
     *state.history.lock().unwrap() = entries;
 }

@@ -6,6 +6,7 @@ mod window;
 use commands::capture::AppState;
 use commands::clips::ClipsState;
 use commands::dcheck::DcheckState;
+use commands::runtime::RuntimeState;
 
 /// Hotkey/tray → launcher: freshly opened, reset to the tool grid.
 pub const EV_RESET: &str = "brucekit://reset";
@@ -13,6 +14,8 @@ pub const EV_RESET: &str = "brucekit://reset";
 pub const EV_OPEN_SETTINGS: &str = "brucekit://open-settings";
 /// Rust → overlay: a fresh capture is stored; refetch the frame + mode.
 pub const EV_CAPTURE_READY: &str = "brucekit://capture-ready";
+/// Per-module hotkey → launcher: open straight into one tool (payload: id).
+pub const EV_OPEN_TOOL: &str = "brucekit://open-tool";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -27,16 +30,31 @@ pub fn run() {
         .manage(AppState::default())
         .manage(ClipsState::default())
         .manage(DcheckState::default())
+        .manage(RuntimeState::default())
+        .manage(window::KeepOpen::default())
+        // Click-away dismiss lives here (not JS) so a blur can be forgiven
+        // when the cursor shows it's really a resize or header-drag grab —
+        // the native size/move loop blips focus exactly like a click-away.
+        .on_window_event(|window, event| {
+            if window.label() != "launcher" {
+                return;
+            }
+            if matches!(event, tauri::WindowEvent::Focused(false)) {
+                window::on_launcher_blur(window);
+            }
+        })
         .setup(|app| {
             let handle = app.handle().clone();
 
             let cfg = commands::config::load(&handle);
-            if let Err(e) = hotkey::register(&handle, &cfg.hotkey) {
+            if let Err(e) = hotkey::register_all(&handle, &cfg) {
                 eprintln!("[brucekit] hotkey registration failed: {e}");
             }
 
+            window::restore_launcher_size(&handle, &cfg);
+
             // Background services (clipboard monitor, pinger) run only for
-            // modules the user hasn't toggled off.
+            // modules the user hasn't toggled off — and not at all in eco mode.
             commands::start_enabled_services(&handle, &cfg);
 
             // Warm the overlay webview now so the first capture shows instantly.
@@ -59,13 +77,23 @@ pub fn run() {
             commands::config::set_hotkey,
             commands::config::set_autostart,
             commands::config::set_module_enabled,
+            commands::config::set_module_hotkey,
+            commands::config::set_module_pinned,
+            commands::config::set_eco_mode,
+            commands::config::set_launcher_size,
+            window::set_keep_open,
             commands::clips::clips_list,
             commands::clips::clips_copy,
             commands::clips::clips_toggle_pin,
             commands::clips::clips_delete,
             commands::clips::clips_clear,
+            commands::clips::clips_restore,
+            commands::clips::clips_apply_limit,
+            commands::clips::clips_open_folder,
             commands::dcheck::dcheck_history,
             commands::dcheck::dcheck_clear,
+            commands::runtime::runtime_uptime,
+            commands::runtime::runtime_apps,
         ])
         .run(tauri::generate_context!())
         .expect("error while running brucekit");

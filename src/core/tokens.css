@@ -2,31 +2,37 @@
  * brucekit design tokens — black-and-white technical HUD.
  * Terminal / sci-fi interface minimalism (matches brucelsprouts.com):
  * monospace type, near-black ground, hairline borders, one restrained accent.
+ * Color is an event: red for failures, orange for running hot — nothing else.
  */
 
 :root {
-  /* Surfaces (near-black, layered) */
-  --bk-bg: #0a0b0d;
-  --bk-bg-elev: #0e1013;
-  --bk-panel: #0c0e11;
-  --bk-tile-bg: #101317;
-  --bk-tile-bg-hover: #14181d;
+  /* Surfaces. Near-black, not true black: pure #000 left the panel edges and
+     hairlines with nothing to sit against, and read as a hole rather than a
+     surface. A few points of lift give the layering somewhere to go. Anything
+     above the ground earns its lift with lightness, never a hue, and each step
+     stays small — this should read as depth, not a stack of grey cards. */
+  --bk-bg: #050608;
+  --bk-bg-elev: #0b0d10;
+  --bk-panel: #08090c;
+  --bk-tile-bg: #0d0f13;
+  --bk-tile-bg-hover: #13161b;
 
   /* Foreground (light gray → white) */
   --bk-fg: #e7e9ec;
   --bk-fg-dim: #9aa1a9;
-  --bk-fg-faint: #565d66;
+  --bk-fg-faint: #5b626b;
 
   /* Lines — hairline (1px) borders and tick framing */
-  --bk-line: #21252b;
-  --bk-line-bright: #313842;
+  --bk-line: #191c21;
+  --bk-line-bright: #2b313a;
 
-  /* Signal accent: white with a soft glow. Color is an event — the only
-     chromatic pixels in the app are the danger red and the sampled swatch. */
+  /* Signal accent: white with a soft glow. The only chromatic pixels in the
+     app are the event colors below and the sampled swatch. */
   --bk-accent: #f4f6f8;
   --bk-accent-soft: rgba(244, 246, 248, 0.07);
   --bk-accent-line: rgba(244, 246, 248, 0.55);
-  --bk-danger: #ff6b6b;
+  --bk-warn: #ff8c00;
+  --bk-danger: #ff2020;
 
   /* Soft glow (box-shadow / text-shadow / drop-shadow variants) */
   --bk-glow: 0 0 14px rgba(255, 255, 255, 0.12), 0 0 3px rgba(255, 255, 255, 0.22);
@@ -48,9 +54,11 @@
   --bk-pad: 14px;
   --bk-tile: 104px;
 
-  /* Effects */
-  --bk-shadow: 0 24px 70px rgba(0, 0, 0, 0.62), 0 2px 0 rgba(0, 0, 0, 0.4);
-  --bk-scanline: rgba(255, 255, 255, 0.018);
+  /* Effects. The ground is dark enough that a cast shadow alone barely reads,
+     so the window's edge is carried by a hairline ring as well. */
+  --bk-shadow: 0 28px 80px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --bk-inner-lift: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --bk-scanline: rgba(255, 255, 255, 0.012);
   --bk-fast: 90ms;
   --bk-med: 150ms;
 }

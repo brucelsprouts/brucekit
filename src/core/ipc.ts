@@ -23,6 +23,14 @@ export type Config = {
   launchOnStartup: boolean;
   /** Module ids toggled off: hidden from the grid, background services stopped. */
   disabledModules: string[];
+  /** Module ids pinned, in pin order: sorted to the front of the grid + tray. */
+  pinnedModules: string[];
+  /** Per-module global hotkeys: module id → accelerator chord. */
+  moduleHotkeys: Record<string, string>;
+  /** Eco mode: all background services paused, module toggles untouched. */
+  ecoMode: boolean;
+  /** Last user-dragged launcher size (logical px); null until first resize. */
+  launcherSize: { width: number; height: number } | null;
   tools: Record<string, Record<string, unknown>>;
 };
 
@@ -39,6 +47,22 @@ export type PingStatus = "ok" | "high" | "drop";
 
 /** One ping sample (dcheck module). `ms` is -1 on a drop. */
 export type PingEntry = { ts: number; ms: number; status: PingStatus };
+
+/** One tracked stretch of per-app screen time (runtime module). */
+export type UsageSession = {
+  /** Unix millis. */
+  startTs: number;
+  /** Unix millis of the last accumulation. */
+  endTs: number;
+  /** Foreground millis per app (exe name, extension stripped). */
+  apps: Record<string, number>;
+};
+
+/** The usage ledger: the live session plus the previous run's session. */
+export type AppUsage = {
+  current: UsageSession | null;
+  last: UsageSession | null;
+};
 
 type CommandMap = {
   /** Freeze the monitor under the cursor into Rust memory and show the overlay. */
@@ -60,6 +84,16 @@ type CommandMap = {
   set_autostart: { args: { enabled: boolean }; result: null };
   /** Toggle a module: persists + starts/stops its background service. */
   set_module_enabled: { args: { id: string; enabled: boolean }; result: Config };
+  /** Bind (or clear with null) a per-module launch hotkey. */
+  set_module_hotkey: { args: { id: string; chord: string | null }; result: Config };
+  /** Pin/unpin a module: reorders the grid and rebuilds the tray menu. */
+  set_module_pinned: { args: { id: string; pinned: boolean }; result: Config };
+  /** Eco mode: pause/resume every background service in one flip. */
+  set_eco_mode: { args: { enabled: boolean }; result: Config };
+  /** Persist the launcher size the user dragged to (logical px). */
+  set_launcher_size: { args: { width: number; height: number }; result: null };
+  /** Pin the launcher against click-away dismissal (watchable panels). */
+  set_keep_open: { args: { enabled: boolean }; result: null };
 
   /** clipstack: list clips (pinned first, newest first), optionally filtered. */
   clips_list: { args: { search: string | null }; result: Clip[] };
@@ -68,11 +102,21 @@ type CommandMap = {
   clips_toggle_pin: { args: { id: number }; result: null };
   clips_delete: { args: { id: number }; result: null };
   clips_clear: { args: void; result: null };
+  /** clipstack: put deleted clips back (undo). Known ids are skipped. */
+  clips_restore: { args: { clips: Clip[] }; result: null };
+  /** Re-applies the persisted history cap; resolves to the surviving count. */
+  clips_apply_limit: { args: void; result: number };
+  clips_open_folder: { args: void; result: null };
 
   /** dcheck: ping history, oldest first. null/0 rangeSec = everything. */
   dcheck_history: { args: { rangeSec: number | null }; result: PingEntry[] };
   /** dcheck: wipe in-memory history and the on-disk log. */
   dcheck_clear: { args: void; result: null };
+
+  /** runtime: seconds since the machine booted. */
+  runtime_uptime: { args: void; result: number };
+  /** runtime: per-app screen time — current session + the previous run's. */
+  runtime_apps: { args: void; result: AppUsage };
 };
 
 type Args<K extends keyof CommandMap> = CommandMap[K]["args"];

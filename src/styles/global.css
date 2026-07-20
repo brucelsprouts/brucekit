@@ -27,6 +27,18 @@ body {
   cursor: default;
 }
 
+/* Scrolling stays, scrollbar chrome goes — nothing in this UI should get a
+   stock OS scrollbar bolted onto it. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 button {
   font: inherit;
   color: inherit;
@@ -107,6 +119,15 @@ code {
 .bk-action:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+/* A module's headline verb — OCR's Scan, the picker's Eyedrop. Same treatment
+   in both so "the button that does the thing" is recognisable across modules;
+   sized to its label rather than the full width a lone action button takes. */
+.bk-action--inline {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 12px 20px;
+  white-space: nowrap;
 }
 .bk-action svg {
   flex-shrink: 0;
@@ -204,11 +225,11 @@ code {
   gap: var(--bk-gap);
 }
 
-/* system status strip — machine-readout header chrome (drag handle) */
+/* system status strip — machine-readout header chrome (drag handle + nav) */
 .bk-sysbar {
   display: flex;
-  align-items: baseline;
-  gap: 14px;
+  align-items: center;
+  gap: 12px;
   padding: 2px 2px 8px;
   border-bottom: 1px solid var(--bk-line);
   font-size: var(--bk-fs-label);
@@ -224,6 +245,58 @@ code {
 .bk-sysbar__id {
   color: var(--bk-fg);
   text-shadow: var(--bk-text-glow);
+}
+/* breadcrumb: which view the chrome is currently pointing at */
+.bk-sysbar__crumb {
+  flex: 1;
+  min-width: 0;
+  color: var(--bk-fg-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------ window controls */
+.bk-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  cursor: default;
+}
+.bk-nav__btn {
+  width: 24px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--bk-radius);
+  color: var(--bk-fg-faint);
+  transition: color var(--bk-fast) ease, background var(--bk-fast) ease,
+    border-color var(--bk-fast) ease;
+}
+.bk-nav__btn:hover:not(:disabled) {
+  background: var(--bk-tile-bg-hover);
+  border-color: var(--bk-line-bright);
+  color: var(--bk-fg);
+}
+.bk-nav__btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+/* Close is the one destructive control up here — it earns red on approach. */
+.bk-nav__btn--close:hover {
+  background: rgba(255, 32, 32, 0.12);
+  border-color: var(--bk-danger);
+  color: var(--bk-danger);
+}
+.bk-nav__sep {
+  width: 1px;
+  height: 13px;
+  margin: 0 4px;
+  background: var(--bk-line-bright);
 }
 
 /* comment-style section divider: // MODULES */
@@ -307,30 +380,33 @@ code {
 }
 
 /* --------------------------------------------------------------- grid */
-.bk-grid {
+/* The grid splits into pinned + all-modules sections; the wrapper owns the
+   single scroll region so the two grids scroll as one list. */
+.bk-launcher__sections {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bk-gap);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.bk-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--bk-gap);
   align-content: start;
-  overflow-y: auto;
-  padding-right: 2px;
 }
 .bk-grid__empty {
   flex: 1;
   display: grid;
   place-items: center;
+  padding: 24px 0;
 }
 
 .bk-tile {
   position: relative;
   height: var(--bk-tile);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 10px;
   background: var(--bk-tile-bg);
   border: 1px solid var(--bk-line);
   border-radius: var(--bk-radius);
@@ -338,20 +414,76 @@ code {
   transition: background var(--bk-fast) ease, border-color var(--bk-fast) ease,
     color var(--bk-fast) ease;
 }
-.bk-tile:hover {
-  background: var(--bk-tile-bg-hover);
-  color: var(--bk-fg);
+/* The whole tile face is the launch target; the pin sits above it in its own
+   corner so pinning never costs an accidental launch. */
+.bk-tile__hit {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
 }
+/* Hover and keyboard selection look identical, but hover is painted by CSS
+   alone: `:hover` cannot survive the cursor leaving, even when the tile
+   unmounts underneath it. `.is-selected` is keyboard-only (see Launcher).
+   Hover yields to the keyboard while `.is-keynav` is up (see ToolGrid), so
+   only ever one tile is lit. */
+.bk-grid:not(.is-keynav) .bk-tile:hover,
 .bk-tile.is-selected {
   border-color: var(--bk-accent-line);
   color: var(--bk-fg);
   background: var(--bk-tile-bg-hover);
   box-shadow: var(--bk-glow);
 }
+
+/* pin control: invisible until the tile is approached, unless it's already on */
+.bk-tile__pin {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--bk-radius);
+  color: var(--bk-fg-faint);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity var(--bk-fast) ease, color var(--bk-fast) ease;
+}
+.bk-tile:hover .bk-tile__pin,
+.bk-tile__pin:focus-visible,
+.bk-tile__pin.is-active {
+  opacity: 1;
+}
+.bk-tile__pin:hover {
+  color: var(--bk-fg);
+}
+.bk-tile__pin.is-active {
+  color: var(--bk-accent);
+  text-shadow: var(--bk-text-glow);
+}
+/* A pinned tile reads as pinned even with the star tucked in the corner. */
+.bk-tile.is-pinned {
+  border-color: var(--bk-line-bright);
+}
+.bk-grid:not(.is-keynav) .bk-tile:hover .bk-tile__icon,
 .bk-tile.is-selected .bk-tile__icon {
   color: var(--bk-accent);
   filter: var(--bk-icon-glow);
 }
+.bk-grid:not(.is-keynav) .bk-tile:hover .bk-tile__name,
 .bk-tile.is-selected .bk-tile__name {
   text-shadow: var(--bk-text-glow);
 }
@@ -386,7 +518,7 @@ code {
   border-right: 1px solid;
 }
 .bk-tile.is-selected .bk-tile__tick,
-.bk-tile:hover .bk-tile__tick {
+.bk-grid:not(.is-keynav) .bk-tile:hover .bk-tile__tick {
   opacity: 1;
 }
 
@@ -398,45 +530,42 @@ code {
   flex-direction: column;
   min-height: 0;
 }
-.bk-host__bar,
-.bk-settings__bar {
+/* Panel header: identity only. Navigation lives in the sysbar chrome, so this
+   bar spends its whole width saying what you're looking at. */
+.bk-host__bar {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: baseline;
+  gap: 10px;
   padding-bottom: 10px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--bk-line);
+}
+.bk-host__icon {
+  align-self: center;
+  color: var(--bk-fg-dim);
+  line-height: 0;
 }
 .bk-host__title {
   font-size: var(--bk-fs-sm);
   letter-spacing: var(--bk-tracking);
   text-transform: uppercase;
-  color: var(--bk-fg-dim);
-}
-.bk-back {
-  padding: 4px 8px;
-  background: transparent;
-  border: 1px solid var(--bk-line-bright);
-  border-radius: var(--bk-radius);
-  color: var(--bk-fg-dim);
-  font-size: var(--bk-fs-label);
-  letter-spacing: 0.08em;
-}
-.bk-back:hover {
   color: var(--bk-fg);
-  border-color: var(--bk-fg-faint);
+  text-shadow: var(--bk-text-glow);
+}
+.bk-host__desc {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--bk-fs-label);
+  letter-spacing: 0.04em;
+  color: var(--bk-fg-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .bk-host__body,
 .bk-settings__body {
   flex: 1;
   overflow-y: auto;
-}
-/* settings scrolls, but shows no scrollbar chrome */
-.bk-settings__body {
-  scrollbar-width: none;
-}
-.bk-settings__body::-webkit-scrollbar {
-  display: none;
 }
 
 /* -------------------------------------------------------- color panel */
@@ -472,12 +601,15 @@ code {
 
 .bk-colorpanel__readout {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 16px;
 }
 .bk-colorpanel__value {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
 }
 .bk-mono-value {
@@ -486,25 +618,123 @@ code {
   color: var(--bk-fg);
   user-select: text;
 }
-.bk-colorpanel__copy {
-  margin-left: auto;
-  align-self: center;
-}
-
-/* manual picker: hex field + R/G/B sliders */
-.bk-picker {
+.bk-colorpanel__actions {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  justify-content: center;
+  gap: 8px;
+}
+.bk-colorpanel__actions .bk-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.bk-swatch--lg {
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+}
+
+/* Manual picker. Two columns so the SV field can stay roughly square instead
+   of stretching into a letterbox: field + hue rail on the left, the numeric
+   controls that annotate them on the right. */
+.bk-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 12px 18px;
   padding: 14px;
   border: 1px solid var(--bk-line);
   border-radius: var(--bk-radius);
   background: var(--bk-bg-elev);
 }
+.bk-picker__controls {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+}
+/* Below this the two columns would each be too cramped to aim in. */
+@media (max-width: 620px) {
+  .bk-picker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bk-picker__controls {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
+/* saturation × value square: white wash left→right, black wash top→bottom,
+   over a flat hue ground supplied inline. */
+.bk-svfield {
+  position: relative;
+  grid-column: 1;
+  height: 100%;
+  min-height: 168px;
+  border: 1px solid var(--bk-line-bright);
+  border-radius: var(--bk-radius);
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+.bk-svfield__white,
+.bk-svfield__black {
+  position: absolute;
+  inset: 0;
+}
+.bk-svfield__white {
+  background: linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+}
+.bk-svfield__black {
+  background: linear-gradient(to top, #000, rgba(0, 0, 0, 0));
+}
+.bk-svfield__puck {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
 .bk-hexfield {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* recents: one-click return to a color you already landed on */
+.bk-recents {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bk-recents__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bk-recents__swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--bk-line-bright);
+  border-radius: var(--bk-radius);
+  transition: border-color var(--bk-fast) ease, box-shadow var(--bk-fast) ease;
+}
+.bk-recents__swatch:hover {
+  border-color: var(--bk-fg-faint);
+}
+.bk-recents__swatch.is-active {
+  border-color: var(--bk-accent);
+  box-shadow: var(--bk-glow);
 }
 .bk-hexinput {
   width: 130px;
@@ -544,36 +774,180 @@ code {
   color: var(--bk-fg);
   text-align: right;
 }
+/* Channel sliders: the track previews what the control does. Styling it means
+   dropping the native appearance, so thumb rules are spelled out per engine. */
 .bk-slider input[type="range"] {
   width: 100%;
-  height: 3px;
-  accent-color: var(--bk-accent);
+  height: 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
   cursor: pointer;
+}
+.bk-slider input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 1px solid var(--bk-line-bright);
+  border-radius: var(--bk-radius);
+  background: linear-gradient(
+    to right,
+    var(--bk-track-from, var(--bk-bg)),
+    var(--bk-track-to, var(--bk-fg))
+  );
+}
+.bk-slider input[type="range"]::-moz-range-track {
+  height: 6px;
+  border: 1px solid var(--bk-line-bright);
+  border-radius: var(--bk-radius);
+  background: linear-gradient(
+    to right,
+    var(--bk-track-from, var(--bk-bg)),
+    var(--bk-track-to, var(--bk-fg))
+  );
+}
+.bk-slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 4px;
+  height: 14px;
+  margin-top: -5px;
+  border: 1px solid #000;
+  border-radius: 1px;
+  background: var(--bk-fg);
+  box-shadow: var(--bk-glow);
+}
+.bk-slider input[type="range"]::-moz-range-thumb {
+  width: 4px;
+  height: 14px;
+  border: 1px solid #000;
+  border-radius: 1px;
+  background: var(--bk-fg);
+  box-shadow: var(--bk-glow);
+}
+/* The hue rail is the one place the full spectrum is legitimately on screen. */
+.bk-slider--hue input[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    #f00 0%,
+    #ff0 17%,
+    #0f0 33%,
+    #0ff 50%,
+    #00f 67%,
+    #f0f 83%,
+    #f00 100%
+  );
+}
+.bk-slider--hue input[type="range"]::-moz-range-track {
+  background: linear-gradient(
+    to right,
+    #f00 0%,
+    #ff0 17%,
+    #0f0 33%,
+    #0ff 50%,
+    #00f 67%,
+    #f0f 83%,
+    #f00 100%
+  );
+}
+.bk-slider--hue {
+  grid-column: 1;
+}
+.bk-slider--hue .bk-slider__val {
+  width: auto;
 }
 
 /* ---------------------------------------------------------- ocr panel */
-.bk-ocrpanel {
+.bk-ocr {
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
-.bk-ocrpanel__status {
-  padding: 0 2px;
-}
-.bk-ocrpanel__resultbar {
+.bk-ocr__bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 14px;
 }
-.bk-ocrpanel__result {
+
+/* Status as a lamp + label. The dot is the only thing that changes color, so
+   the state reads at a glance without the whole row shouting. */
+.bk-ocr__state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--bk-fs-label);
+  letter-spacing: var(--bk-tracking);
+  text-transform: uppercase;
+  color: var(--bk-fg-faint);
+}
+.bk-ocr__dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bk-fg-faint);
+}
+.bk-ocr__state--scanning {
+  color: var(--bk-fg-dim);
+}
+.bk-ocr__state--scanning .bk-ocr__dot {
+  background: var(--bk-accent);
+  box-shadow: var(--bk-glow);
+  animation: bk-ocr-pulse 1.1s ease-in-out infinite;
+}
+.bk-ocr__state--done {
+  color: var(--bk-fg-dim);
+}
+.bk-ocr__state--done .bk-ocr__dot {
+  background: var(--bk-accent);
+  box-shadow: var(--bk-glow);
+}
+.bk-ocr__state--empty .bk-ocr__dot {
+  background: var(--bk-warn);
+}
+.bk-ocr__state--error {
+  color: var(--bk-danger);
+}
+.bk-ocr__state--error .bk-ocr__dot {
+  background: var(--bk-danger);
+}
+@keyframes bk-ocr-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.bk-ocr__result {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.bk-ocrpanel__text {
+.bk-ocr__resultbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+/* Counts take the slack so the two buttons stay pinned right. */
+.bk-ocr__counts {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: var(--bk-fs-label);
+  letter-spacing: 0.04em;
+  color: var(--bk-fg-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-ocr__resultbar .bk-label {
+  flex-shrink: 0;
+}
+.bk-ocr__resultbar .bk-label + .bk-btn {
+  margin-left: auto;
+}
+.bk-ocr__text {
   flex: 1;
   min-height: 120px;
   padding: 10px 12px;
@@ -589,12 +963,34 @@ code {
   user-select: text;
   cursor: text;
 }
-.bk-ocrpanel__text::placeholder {
-  color: var(--bk-fg-faint);
-}
-.bk-ocrpanel__text:focus {
+.bk-ocr__text:focus {
   border-color: var(--bk-accent-line);
   box-shadow: var(--bk-glow);
+}
+
+/* Empty state: says what will happen, and says something different when a
+   scan genuinely came back with nothing. */
+.bk-ocr__placeholder {
+  flex: 1;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  border: 1px dashed var(--bk-line-bright);
+  border-radius: var(--bk-radius);
+  background: var(--bk-bg-elev);
+  color: var(--bk-fg-faint);
+  text-align: center;
+}
+.bk-ocr__placeholder em {
+  font-style: normal;
+  font-size: var(--bk-fs-sm);
+  color: var(--bk-fg-faint);
+  max-width: 42ch;
+  line-height: 1.5;
 }
 
 /* ------------------------------------------------------ tool crash */
@@ -605,7 +1001,7 @@ code {
   padding: 16px;
   border: 1px solid var(--bk-danger);
   border-radius: var(--bk-radius);
-  background: rgba(255, 107, 107, 0.06);
+  background: rgba(255, 32, 32, 0.06);
 }
 .bk-toolcrash__msg {
   margin: 0;
@@ -728,6 +1124,19 @@ code {
   font-size: 8px;
   letter-spacing: 0.12em;
   color: var(--bk-fg-faint);
+}
+.bk-toollist__hotkey {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bk-toollist__hotkey .bk-chord {
+  padding: 3px 8px;
+  font-size: var(--bk-fs-label);
+}
+.bk-btn--sm {
+  padding: 4px 9px;
+  font-size: var(--bk-fs-label);
 }
 
 /* --------------------------------------------------------- toaster */
@@ -922,10 +1331,17 @@ code {
   font-size: var(--bk-fs-sm);
   color: var(--bk-fg-faint);
 }
-.bk-clips__list {
+/* Pinned and recent are separate lists under separate headers; the wrapper
+   owns the one scroll region so they still read as a single column. */
+.bk-clips__scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bk-clips__list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -934,6 +1350,12 @@ code {
   border: 1px solid var(--bk-line);
   border-radius: var(--bk-radius);
   background: var(--bk-bg-elev);
+}
+/* Pinned rows are a kept set, not a queue — the block says so at its edge
+   rather than tinting every row. */
+.bk-clips__list--pinned {
+  border-color: var(--bk-line-bright);
+  border-left: 2px solid var(--bk-accent-line);
 }
 .bk-clip {
   display: flex;
@@ -945,8 +1367,13 @@ code {
 .bk-clip:last-child {
   border-bottom: 0;
 }
+/* Inside the pinned block every row is pinned, so the old per-row tint would
+   be noise; it stays only for a pinned row that turns up in search results. */
 .bk-clip--pinned {
   background: var(--bk-accent-soft);
+}
+.bk-clips__list--pinned .bk-clip--pinned {
+  background: transparent;
 }
 .bk-clip__text {
   flex: 1;
@@ -998,11 +1425,40 @@ code {
   letter-spacing: var(--bk-tracking);
   color: var(--bk-danger);
 }
+/* Unpinning is reversible — it asks, but it isn't a delete, so it isn't red. */
+.bk-clip__confirm.is-warn {
+  color: var(--bk-warn);
+}
 .bk-clips__footer,
 .bk-dcheck__footer {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* clipstack settings drawer */
+.bk-clips__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bk-line);
+}
+.bk-clips__form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.bk-clips__apps {
+  resize: vertical;
+  min-height: 62px;
+  line-height: 1.5;
+}
+.bk-clips__note {
+  font-size: var(--bk-fs-label);
+  line-height: 1.5;
+  color: var(--bk-fg-dim);
+  font-style: normal;
 }
 
 /* ------------------------------------------------------- dcheck panel */
@@ -1034,12 +1490,27 @@ code {
 .bk-dstat__val--danger {
   color: var(--bk-danger);
 }
+.bk-dcheck__rangebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bk-dcheck__viewhint {
+  margin-left: auto;
+}
 .bk-dcheck__canvas {
   width: 100%;
-  height: 120px;
+  height: 168px;
   border: 1px solid var(--bk-line);
   border-radius: var(--bk-radius);
   background: var(--bk-bg-elev);
+  cursor: grab;
+}
+.bk-dcheck__canvas:active {
+  cursor: grabbing;
+}
+.bk-dcheck__canvas.is-panned {
+  border-color: var(--bk-line-bright);
 }
 .bk-dcheck__form {
   display: flex;
@@ -1056,14 +1527,140 @@ code {
   flex: 0 0 84px;
 }
 
+/* ------------------------------------------------------ runtime panel */
+.bk-runtime {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bk-runtime__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.bk-runtime__totals {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* The headline number: total tracked time for the selected run. */
+.bk-runtime__big {
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: 0.02em;
+  color: var(--bk-fg);
+  text-shadow: var(--bk-text-glow);
+}
+.bk-runtime__sub {
+  font-style: normal;
+  font-size: var(--bk-fs-label);
+  letter-spacing: 0.04em;
+  color: var(--bk-fg-faint);
+}
+.bk-runtime__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 22px 0;
+  align-items: center;
+}
+.bk-runtime__empty em {
+  font-style: normal;
+  font-size: var(--bk-fs-sm);
+  color: var(--bk-fg-faint);
+}
+
+/* ranked app rows: rank · name · bar · time · share */
+.bk-applist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bk-applist__row {
+  display: grid;
+  grid-template-columns: 22px minmax(90px, 150px) 1fr 62px 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--bk-line);
+}
+.bk-applist__row:last-child {
+  border-bottom: 0;
+}
+.bk-applist__rank {
+  font-size: var(--bk-fs-label);
+  color: var(--bk-fg-faint);
+  letter-spacing: 0.06em;
+}
+.bk-applist__name {
+  font-size: var(--bk-fs-sm);
+  color: var(--bk-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-applist__track {
+  height: 6px;
+  min-width: 0;
+  background: var(--bk-bg-elev);
+  border: 1px solid var(--bk-line);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.bk-applist__fill {
+  display: block;
+  height: 100%;
+  background: var(--bk-fg-dim);
+}
+/* The leader carries the accent so the ranking has an anchor. */
+.bk-applist__row:first-child .bk-applist__fill {
+  background: var(--bk-accent);
+  box-shadow: var(--bk-glow);
+}
+.bk-applist__time {
+  text-align: right;
+  font-size: var(--bk-fs-sm);
+  color: var(--bk-fg);
+  white-space: nowrap;
+}
+.bk-applist__share {
+  text-align: right;
+  font-size: var(--bk-fs-label);
+  color: var(--bk-fg-faint);
+  white-space: nowrap;
+}
+
+
 /* -------------------------------------------------- settings: modules */
 .bk-toollist__item--off .bk-toollist__icon,
 .bk-toollist__item--off .bk-toollist__text {
   opacity: 0.45;
 }
-.bk-settings__note {
-  font-style: normal;
-  font-size: var(--bk-fs-label);
+/* Pin control in the module list — same star vocabulary as the tile and the
+   clip row, so one glyph means one thing everywhere in the app. */
+.bk-pinbtn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--bk-radius);
   color: var(--bk-fg-faint);
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1;
+  transition: color var(--bk-fast) ease;
+}
+.bk-pinbtn:hover {
+  color: var(--bk-fg);
+}
+.bk-pinbtn.is-active {
+  color: var(--bk-accent);
+  text-shadow: var(--bk-text-glow);
 }

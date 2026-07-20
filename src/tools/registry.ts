@@ -90,6 +90,25 @@ export function searchTools(tools: ToolModule[], query: string): ToolModule[] {
   return scored.map((s) => s.tool);
 }
 
+/**
+ * Float pinned modules to the front, in pin order, leaving everything else in
+ * its existing order (pure; unit-tested). Stable by construction: the two
+ * groups are built by a single pass, so equal-priority tools never shuffle.
+ * Pinned ids with no matching module (a tool removed since it was pinned) are
+ * simply ignored.
+ */
+export function sortPinned(tools: ToolModule[], pinned: string[]): ToolModule[] {
+  if (pinned.length === 0) return tools;
+  const rank = new Map(pinned.map((id, i) => [id, i]));
+  const front: ToolModule[] = [];
+  const rest: ToolModule[] = [];
+  for (const tool of tools) {
+    (rank.has(tool.id) ? front : rest).push(tool);
+  }
+  front.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+  return [...front, ...rest];
+}
+
 /** Hide modules the user toggled off (pure; unit-tested). */
 export function filterDisabled(tools: ToolModule[], disabled: string[]): ToolModule[] {
   if (disabled.length === 0) return tools;

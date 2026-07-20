@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { buildRegistry, filterDisabled, searchTools, validateModule } from "./registry";
+import {
+  buildRegistry,
+  filterDisabled,
+  searchTools,
+  sortPinned,
+  validateModule,
+} from "./registry";
 import type { ToolModule } from "./types";
 
 const Icon = () => null;
@@ -122,5 +128,51 @@ describe("filterDisabled", () => {
 
   it("can hide everything", () => {
     expect(filterDisabled(tools, ["clipstack", "dcheck", "color-picker"])).toEqual([]);
+  });
+});
+
+describe("sortPinned", () => {
+  const tools = [
+    mod({ id: "clipstack", name: "clipstack" }),
+    mod({ id: "dcheck", name: "dcheck" }),
+    mod({ id: "runtime", name: "runtime" }),
+    mod({ id: "color-picker", name: "color-picker" }),
+  ];
+
+  it("floats pinned tools to the front in pin order", () => {
+    expect(sortPinned(tools, ["runtime", "clipstack"]).map((t) => t.id)).toEqual([
+      "runtime",
+      "clipstack",
+      "dcheck",
+      "color-picker",
+    ]);
+  });
+
+  it("leaves the unpinned tail in its original order", () => {
+    expect(sortPinned(tools, ["color-picker"]).map((t) => t.id)).toEqual([
+      "color-picker",
+      "clipstack",
+      "dcheck",
+      "runtime",
+    ]);
+  });
+
+  it("returns the list untouched when nothing is pinned", () => {
+    expect(sortPinned(tools, [])).toBe(tools);
+  });
+
+  it("ignores pinned ids with no installed module", () => {
+    expect(sortPinned(tools, ["ghost", "dcheck"]).map((t) => t.id)).toEqual([
+      "dcheck",
+      "clipstack",
+      "runtime",
+      "color-picker",
+    ]);
+  });
+
+  it("does not mutate its input", () => {
+    const before = tools.map((t) => t.id);
+    sortPinned(tools, ["runtime"]);
+    expect(tools.map((t) => t.id)).toEqual(before);
   });
 });

@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { filterDisabled, search } from "../tools/registry";
+import { filterDisabled, getTools, search, sortPinned } from "../tools/registry";
 import type { ToolContext, ToolModule } from "../tools/types";
 import { errorMessage, invoke } from "../core/ipc";
 import { toast } from "../core/toast";
+import { isEditableTarget, isUndoHotkey, undoSlot } from "../core/undo";
 import { makeToolSettings } from "../core/settings";
-import { EV_OPEN_SETTINGS, EV_RESET } from "../core/events";
+import { EV_OPEN_SETTINGS, EV_OPEN_TOOL, EV_RESET } from "../core/events";
 import { SearchBar } from "./SearchBar";
 import { ToolGrid } from "./ToolGrid";
 import { ToolHost } from "./ToolHost";
+import { NavBar } from "./NavBar";
 import { Settings } from "../components/Settings";
 
 const GRID_COLS = 4;
@@ -22,20 +24,52 @@ export function Launcher() {
   const [activeTool, setActiveTool] = useState<ToolModule | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [disabled, setDisabled] = useState<string[]>([]);
-  // Show the selection ring only while the mouse is over a tile or the user is
-  // keyboard-navigating — never linger on a tile the mouse merely passed over.
-  const [highlightOn, setHighlightOn] = useState(true);
-  // Grabbing the header to drag makes the webview lose focus for a beat as the
-  // native move loop starts; ignore any blur until this moment passes so the
-  // click-away dismiss doesn't fire mid-drag.
-  const suppressBlurUntil = useRef(0);
+  const [pinned, setPinned] = useState<string[]>([]);
+  // Bumped by the refresh control; used as a React key so the current view is
+  // torn down and rebuilt rather than merely re-rendered — a panel that has
+  // gone stale (dead listener, bad fetch) comes back clean.
+  const [viewNonce, setViewNonce] = useState(0);
+  // What is driving the highlight. Only "keys" paints the ring from React —
+  // pointer highlighting is left to `.bk-tile:hover`, which cannot outlive the
+  // cursor. A JS-painted hover ring could: mouseleave never fires when the tile
+  // unmounts underneath the pointer (launching a tool, a search that filters
+  // the tile away) or when the window hides, and the tile stayed lit.
+  const [highlight, setHighlight] = useState<"none" | "mouse" | "keys">("none");
+  // Mouse-forward target: the view (panel/settings) most recently backed out
+  // of. Cleared whenever a view is opened by normal means, like browser
+  // history's forward stack. Mirrored into state so the forward button can
+  // render enabled/disabled — the ref stays the source of truth for handlers.
+  const forwardView = useRef<{ kind: "settings" } | { kind: "tool"; tool: ToolModule } | null>(
+    null,
+  );
+  const [canGoForward, setCanGoForward] = useState(false);
+  // Click-away dismissal lives on the Rust side (window::on_launcher_blur):
+  // it can see the global cursor at blur time, so resize grabs and header
+  // drags are forgiven while real click-aways still hide the window.
 
-  const results = useMemo(() => filterDisabled(search(query), disabled), [query, disabled]);
+  const setForward = useCallback((view: typeof forwardView.current) => {
+    forwardView.current = view;
+    setCanGoForward(view !== null);
+  }, []);
 
-  // Toggled-off modules stay out of the grid; the list comes from config.
+  const results = useMemo(
+    () => sortPinned(filterDisabled(search(query), disabled), pinned),
+    [query, disabled, pinned],
+  );
+
+  // The grid splits into a pinned section and the rest, but only at rest:
+  // while searching, relevance owns the order and a split would just fragment
+  // the ranking. Both sections index into `results`, so keyboard nav is one
+  // continuous run across them.
+  const pinnedCount = query.trim() ? 0 : results.filter((t) => pinned.includes(t.id)).length;
+
+  // Toggled-off modules stay out of the grid; pins order what's left.
   useEffect(() => {
     invoke("get_config")
-      .then((cfg) => setDisabled(cfg.disabledModules ?? []))
+      .then((cfg) => {
+        setDisabled(cfg.disabledModules ?? []);
+        setPinned(cfg.pinnedModules ?? []);
+      })
       .catch(() => {
         /* outside a Tauri webview (browser preview) — all modules shown */
       });
@@ -45,6 +79,16 @@ export function Launcher() {
     try {
       const cfg = await invoke("set_module_enabled", { id, enabled });
       setDisabled(cfg.disabledModules ?? []);
+      setPinned(cfg.pinnedModules ?? []);
+    } catch (err) {
+      toast(errorMessage(err), { kind: "error" });
+    }
+  }, []);
+
+  const togglePin = useCallback(async (id: string, next: boolean) => {
+    try {
+      const cfg = await invoke("set_module_pinned", { id, pinned: next });
+      setPinned(cfg.pinnedModules ?? []);
     } catch (err) {
       toast(errorMessage(err), { kind: "error" });
     }
@@ -81,6 +125,7 @@ export function Launcher() {
   const dispatchTool = useCallback(
     (tool: ToolModule) => {
       if (tool.kind === "panel") {
+        setForward(null);
         setActiveTool(tool);
         return;
       }
@@ -97,40 +142,94 @@ export function Launcher() {
         toast(`${tool.name} failed`, { kind: "error" });
       }
     },
-    [makeCtx],
+    [makeCtx, setForward],
   );
+
+  const atRoot = !settingsOpen && !activeTool;
+
+  // One implementation behind all three back affordances: Esc, mouse button 3,
+  // and the ◀ control. Unwinds one level and records what it left for forward.
+  const goBack = useCallback(() => {
+    if (settingsOpen) {
+      setForward({ kind: "settings" });
+      setSettingsOpen(false);
+    } else if (activeTool) {
+      setForward({ kind: "tool", tool: activeTool });
+      setActiveTool(null);
+    }
+  }, [settingsOpen, activeTool, setForward]);
+
+  const goForward = useCallback(() => {
+    // Forward only applies from the grid, and only after a back.
+    if (!atRoot) return;
+    const view = forwardView.current;
+    if (!view) return;
+    setForward(null);
+    if (view.kind === "settings") setSettingsOpen(true);
+    else setActiveTool(view.tool);
+  }, [atRoot, setForward]);
+
+  const refresh = useCallback(() => {
+    setViewNonce((n) => n + 1);
+    if (atRoot) {
+      setQuery("");
+      setSelected(0);
+      setHighlight("none");
+      invoke("get_config")
+        .then((cfg) => {
+          setDisabled(cfg.disabledModules ?? []);
+          setPinned(cfg.pinnedModules ?? []);
+        })
+        .catch(() => {});
+    }
+  }, [atRoot]);
 
   // Esc: unwind settings → panel → close. Works even when the search box is gone.
   useEffect(() => {
     function onKey(e: globalThis.KeyboardEvent) {
       if (e.key !== "Escape") return;
-      if (settingsOpen) setSettingsOpen(false);
-      else if (activeTool) setActiveTool(null);
-      else void closeLauncher();
+      if (atRoot) void closeLauncher();
+      else goBack();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [settingsOpen, activeTool, closeLauncher]);
+  }, [atRoot, goBack, closeLauncher]);
 
-  // Dismiss on blur / click-away (spec §3.1).
+  // Ctrl+Z runs whatever destructive action a panel last registered. Not scoped
+  // to the grid — the undo that matters is the one for the panel you're in.
   useEffect(() => {
-    let unlisten: Promise<() => void> | null = null;
-    try {
-      unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-        if (focused) return;
-        // A blur inside the grab window is the native drag starting, not a
-        // click-away — ignore it so the window survives being dragged.
-        if (Date.now() < suppressBlurUntil.current) return;
-        setSettingsOpen(false);
-        void closeLauncher();
-      });
-    } catch {
-      /* outside a Tauri webview (browser preview) — no focus tracking */
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (!isUndoHotkey(e) || isEditableTarget(e.target)) return;
+      const entry = undoSlot.take();
+      if (!entry) return;
+      e.preventDefault();
+      Promise.resolve(entry.run())
+        .then(() => toast(`Restored ${entry.label}`, { kind: "success" }))
+        .catch((err) => toast(errorMessage(err), { kind: "error" }));
     }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Mouse back/forward (buttons 3/4) walk the same view stack as the buttons.
+  useEffect(() => {
+    function onMouseUp(e: globalThis.MouseEvent) {
+      if (e.button !== 3 && e.button !== 4) return;
+      e.preventDefault();
+      if (e.button === 3) goBack();
+      else goForward();
+    }
+    // Swallow the down half too so the webview never treats it as history nav.
+    function onMouseDown(e: globalThis.MouseEvent) {
+      if (e.button === 3 || e.button === 4) e.preventDefault();
+    }
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mousedown", onMouseDown);
     return () => {
-      unlisten?.then((off) => off()).catch(() => {});
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mousedown", onMouseDown);
     };
-  }, [closeLauncher]);
+  }, [goBack, goForward]);
 
   // Tray/hotkey signals: fresh open resets to the grid; tray "Settings" opens it.
   useEffect(() => {
@@ -140,44 +239,108 @@ export function Launcher() {
       setSelected(0);
       setActiveTool(null);
       setSettingsOpen(false);
-      setHighlightOn(true);
+      setHighlight("none");
+      setForward(null);
     })
       .then((un) => disposers.push(un))
       .catch(() => {});
     listen(EV_OPEN_SETTINGS, () => {
+      setForward(null);
       setActiveTool(null);
       setSettingsOpen(true);
     })
       .then((un) => disposers.push(un))
       .catch(() => {});
     return () => disposers.forEach((d) => d());
+  }, [setForward]);
+
+  // Per-module hotkey (and tray pin entries): Rust shows the window and names
+  // the tool to open.
+  useEffect(() => {
+    let dispose = () => {};
+    listen<string>(EV_OPEN_TOOL, (event) => {
+      const tool = getTools().find((t) => t.id === event.payload);
+      if (!tool) return;
+      setQuery("");
+      setSelected(0);
+      setSettingsOpen(false);
+      setHighlight("none");
+      setForward(null);
+      setActiveTool(null);
+      dispatchTool(tool);
+    })
+      .then((un) => {
+        dispose = un;
+      })
+      .catch(() => {});
+    return () => dispose();
+  }, [dispatchTool, setForward]);
+
+  // A `keepOpen` panel pins the launcher against click-away for as long as
+  // it's the active view. Syncing on every change of `activeTool` — including
+  // back to null — is what guarantees the pin is released when you leave.
+  useEffect(() => {
+    invoke("set_keep_open", { enabled: activeTool?.keepOpen === true }).catch(() => {
+      /* outside a Tauri webview (browser preview) — nothing to pin */
+    });
+  }, [activeTool]);
+
+  // Persist the size the user drags the window to (debounced — the OS streams
+  // resize events during the drag). Stored logical so DPI changes don't warp it.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let unlisten: Promise<() => void> | null = null;
+    try {
+      const win = getCurrentWindow();
+      unlisten = win.onResized(({ payload }) => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          win
+            .scaleFactor()
+            .then((sf) => {
+              const logical = payload.toLogical(sf);
+              return invoke("set_launcher_size", {
+                width: logical.width,
+                height: logical.height,
+              });
+            })
+            .catch(() => {});
+        }, 400);
+      });
+    } catch {
+      /* outside a Tauri webview (browser preview) — nothing to persist */
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+      unlisten?.then((off) => off()).catch(() => {});
+    };
   }, []);
 
   // Grid navigation at window level so ↵ / arrows work even when the search
   // box has lost focus (footer hints must never lie).
   useEffect(() => {
-    if (settingsOpen || activeTool) return;
+    if (!atRoot) return;
     function onKey(e: globalThis.KeyboardEvent) {
       if (results.length === 0) return;
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
-          setHighlightOn(true);
+          setHighlight("keys");
           setSelected((s) => clamp(s + GRID_COLS, 0, results.length - 1));
           break;
         case "ArrowUp":
           e.preventDefault();
-          setHighlightOn(true);
+          setHighlight("keys");
           setSelected((s) => clamp(s - GRID_COLS, 0, results.length - 1));
           break;
         case "ArrowRight":
           e.preventDefault();
-          setHighlightOn(true);
+          setHighlight("keys");
           setSelected((s) => clamp(s + 1, 0, results.length - 1));
           break;
         case "ArrowLeft":
           e.preventDefault();
-          setHighlightOn(true);
+          setHighlight("keys");
           setSelected((s) => clamp(s - 1, 0, results.length - 1));
           break;
         case "Enter":
@@ -188,7 +351,21 @@ export function Launcher() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [settingsOpen, activeTool, results, selected, dispatchTool]);
+  }, [atRoot, results, selected, dispatchTool]);
+
+  const gridProps = {
+    selectedIndex: highlight === "keys" ? selected : -1,
+    pinned,
+    onSelect: dispatchTool,
+    onTogglePin: (tool: ToolModule) => void togglePin(tool.id, !pinned.includes(tool.id)),
+    // Hover still moves the selection so ↵ launches the tile under the cursor;
+    // only the painting of it belongs to CSS.
+    onHover: (i: number) => {
+      setSelected(i);
+      setHighlight("mouse");
+    },
+    onLeave: () => setHighlight("none"),
+  };
 
   return (
     <div className="bk-launcher" data-window="launcher">
@@ -197,15 +374,11 @@ export function Launcher() {
       <span className="bk-frame bk-frame--bl" aria-hidden="true" />
       <span className="bk-frame bk-frame--br" aria-hidden="true" />
 
-      {/* Grab the header to move the window. We drive the drag ourselves (rather
-          than data-tauri-drag-region) so we can suppress the click-away dismiss
-          for the focus blip the OS move loop causes. */}
+      {/* Grab the header to move the window (blur forgiveness is Rust-side). */}
       <header
         className="bk-sysbar"
-        aria-hidden="true"
         onPointerDown={(e) => {
           if (e.button !== 0) return;
-          suppressBlurUntil.current = Date.now() + 1000;
           try {
             void getCurrentWindow().startDragging().catch(() => {});
           } catch {
@@ -214,16 +387,29 @@ export function Launcher() {
         }}
       >
         <span className="bk-sysbar__id">BRUCEKIT</span>
+        <span className="bk-sysbar__crumb" aria-hidden="true">
+          {settingsOpen ? "/ settings" : activeTool ? `/ ${activeTool.name}` : ""}
+        </span>
+        <NavBar
+          canGoBack={!atRoot}
+          canGoForward={canGoForward}
+          onBack={goBack}
+          onForward={goForward}
+          onRefresh={refresh}
+          onClose={() => void closeLauncher()}
+        />
       </header>
 
       {settingsOpen ? (
         <Settings
-          onClose={() => setSettingsOpen(false)}
+          key={`settings-${viewNonce}`}
           disabled={disabled}
+          pinned={pinned}
           onToggleModule={toggleModule}
+          onTogglePin={togglePin}
         />
       ) : activeTool && activeCtx ? (
-        <ToolHost tool={activeTool} ctx={activeCtx} onBack={() => setActiveTool(null)} />
+        <ToolHost key={`${activeTool.id}-${viewNonce}`} tool={activeTool} ctx={activeCtx} />
       ) : (
         <>
           <div className="bk-launcher__top">
@@ -232,37 +418,49 @@ export function Launcher() {
               onChange={(v) => {
                 setQuery(v);
                 setSelected(0);
-                setHighlightOn(true);
+                // Typing aims the ↵ target at the top hit but does not ring it:
+                // the cursor is in the search box, not on a tile.
+                setHighlight("none");
               }}
               resultCount={results.length}
             />
             <button
               type="button"
               className="bk-gear"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => {
+                setForward(null);
+                setSettingsOpen(true);
+              }}
               aria-label="Open settings"
               title="Settings"
             >
               <GearIcon />
             </button>
           </div>
-          <div className="bk-divider" aria-hidden="true">
-            <span>{"// MODULES"}</span>
+
+          <div className="bk-launcher__sections">
+            {pinnedCount > 0 && (
+              <>
+                <div className="bk-divider" aria-hidden="true">
+                  <span>{"// PINNED"}</span>
+                </div>
+                <ToolGrid {...gridProps} tools={results.slice(0, pinnedCount)} />
+              </>
+            )}
+            <div className="bk-divider" aria-hidden="true">
+              <span>{pinnedCount > 0 ? "// ALL MODULES" : "// MODULES"}</span>
+            </div>
+            <ToolGrid
+              {...gridProps}
+              tools={results.slice(pinnedCount)}
+              indexOffset={pinnedCount}
+            />
           </div>
-          <ToolGrid
-            tools={results}
-            selectedIndex={highlightOn ? selected : -1}
-            onSelect={dispatchTool}
-            onHover={(i) => {
-              setSelected(i);
-              setHighlightOn(true);
-            }}
-            onLeave={() => setHighlightOn(false)}
-          />
+
           <footer className="bk-launcher__hint">
             <span>[↵] launch</span>
             <span>[↑↓←→] move</span>
-            <span>[esc] close</span>
+            <span>[☆] pin</span>
           </footer>
         </>
       )}

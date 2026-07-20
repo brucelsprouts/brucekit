@@ -5,15 +5,17 @@ import { ErrorBoundary } from "./ErrorBoundary";
 type Props = {
   tool: ToolModule;
   ctx: ToolContext;
-  onBack: () => void;
 };
 
 /**
  * Hosts a `panel` tool inline (spec §6). The grid collapses and the panel
  * expands here, wrapped in an error boundary (§7). Invoking `render()` is itself
  * guarded so a throw at call time degrades to a toast + fallback, not a crash.
+ *
+ * Navigation is not this component's job: back / forward / refresh / close all
+ * live in the sysbar chrome, so a panel gets the full width of its own header.
  */
-export function ToolHost({ tool, ctx, onBack }: Props) {
+export function ToolHost({ tool, ctx }: Props) {
   let body: ReactNode;
   try {
     body = tool.render?.(ctx) ?? null;
@@ -28,13 +30,15 @@ export function ToolHost({ tool, ctx, onBack }: Props) {
     );
   }
 
+  const Icon = tool.icon;
   return (
     <section className="bk-host">
       <header className="bk-host__bar">
-        <button type="button" className="bk-back" onClick={onBack} aria-label="Back to tools">
-          ← BACK
-        </button>
-        <span className="bk-host__title">{"// "}{tool.name}</span>
+        <span className="bk-host__icon" aria-hidden="true">
+          <Icon size={15} />
+        </span>
+        <span className="bk-host__title">{tool.name}</span>
+        {tool.description && <span className="bk-host__desc">{tool.description}</span>}
       </header>
       <div className="bk-host__body">
         <ErrorBoundary toolId={tool.id}>{body}</ErrorBoundary>

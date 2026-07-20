@@ -24,3 +24,6 @@ export const EV_CLIP_ADDED = "brucekit://clip-added";
 
 /** Rust → launcher: a dcheck ping completed (payload: PingEntry). */
 export const EV_PING = "brucekit://ping";
+
+/** Per-module hotkey → launcher: open straight into one tool (payload: id). */
+export const EV_OPEN_TOOL = "brucekit://open-tool";

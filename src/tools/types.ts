@@ -29,6 +29,13 @@ export interface ToolModule {
   /** Monochrome SVG icon component. */
   icon: FC<{ size?: number }>;
   kind: ToolKind;
+  /**
+   * Panels meant to be *watched* rather than used and dismissed. While one is
+   * open the launcher stops closing on click-away, so it can sit on screen
+   * while you work elsewhere. Esc, the close button, the tray toggle, and the
+   * hotkey all still close it.
+   */
+  keepOpen?: boolean;
   /** action tools: run a native flow, no inline UI. */
   activate?: (ctx: ToolContext) => void | Promise<void>;
   /** panel tools: render inline UI hosted by the launcher. */
