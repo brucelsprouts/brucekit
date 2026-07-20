@@ -14,6 +14,10 @@ pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+`";
 pub struct Config {
     pub hotkey: String,
     pub launch_on_startup: bool,
+    /// Module ids the user toggled off: hidden from the grid, and any
+    /// background service they own is stopped.
+    #[serde(default)]
+    pub disabled_modules: Vec<String>,
     pub tools: Map<String, Value>,
 }
 
@@ -22,6 +26,7 @@ impl Default for Config {
         Self {
             hotkey: DEFAULT_HOTKEY.to_string(),
             launch_on_startup: false,
+            disabled_modules: Vec::new(),
             tools: Map::new(),
         }
     }
@@ -39,6 +44,15 @@ pub fn load<R: Runtime>(app: &AppHandle<R>) -> Config {
     if let Some(Value::Bool(startup)) = store.get("launchOnStartup") {
         cfg.launch_on_startup = startup;
     }
+    if let Some(Value::Array(disabled)) = store.get("disabledModules") {
+        cfg.disabled_modules = disabled
+            .into_iter()
+            .filter_map(|v| match v {
+                Value::String(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+    }
     if let Some(Value::Object(tools)) = store.get("tools") {
         cfg.tools = tools;
     }
@@ -50,6 +64,7 @@ pub fn save<R: Runtime>(app: &AppHandle<R>, cfg: &Config) -> Result<(), String> 
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
     store.set("hotkey", json!(cfg.hotkey));
     store.set("launchOnStartup", json!(cfg.launch_on_startup));
+    store.set("disabledModules", json!(cfg.disabled_modules));
     store.set("tools", Value::Object(cfg.tools.clone()));
     store.save().map_err(|e| e.to_string())
 }
@@ -72,6 +87,24 @@ pub fn set_hotkey<R: Runtime>(app: AppHandle<R>, chord: String) -> Result<(), St
     let mut cfg = load(&app);
     cfg.hotkey = chord;
     save(&app, &cfg)
+}
+
+/// Toggle a module on/off: persists the choice and starts/stops any
+/// background service the module owns. Returns the updated config.
+#[tauri::command]
+pub fn set_module_enabled<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    enabled: bool,
+) -> Result<Config, String> {
+    let mut cfg = load(&app);
+    cfg.disabled_modules.retain(|m| m != &id);
+    if !enabled {
+        cfg.disabled_modules.push(id.clone());
+    }
+    save(&app, &cfg)?;
+    super::apply_module_service(&app, &id, enabled);
+    Ok(cfg)
 }
 
 #[tauri::command]
@@ -102,16 +135,26 @@ mod tests {
         let cfg = Config {
             hotkey: "CommandOrControl+Alt+K".to_string(),
             launch_on_startup: true,
+            disabled_modules: vec!["dcheck".to_string()],
             tools,
         };
 
         let text = serde_json::to_string(&cfg).unwrap();
-        // JS-facing camelCase key is present in the serialized form.
+        // JS-facing camelCase keys are present in the serialized form.
         assert!(text.contains("launchOnStartup"));
+        assert!(text.contains("disabledModules"));
 
         let back: Config = serde_json::from_str(&text).unwrap();
         assert_eq!(cfg, back);
         assert_eq!(back.tools["color-picker"]["format"], json!("hsl"));
+    }
+
+    #[test]
+    fn config_without_disabled_modules_deserializes_empty() {
+        // Configs written before the module-toggle feature lack the key.
+        let back: Config =
+            serde_json::from_str(r#"{"hotkey":"F1","launchOnStartup":false,"tools":{}}"#).unwrap();
+        assert!(back.disabled_modules.is_empty());
     }
 
     #[test]

@@ -3,7 +3,13 @@ import { invoke, errorMessage, type Config } from "../core/ipc";
 import { toast } from "../core/toast";
 import { getTools } from "../tools/registry";
 
-type Props = { onClose: () => void };
+type Props = {
+  onClose: () => void;
+  /** Module ids currently toggled off. */
+  disabled: string[];
+  /** Persist a module toggle (also starts/stops its background service). */
+  onToggleModule: (id: string, enabled: boolean) => void | Promise<void>;
+};
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta", "OS"]);
 
@@ -34,7 +40,7 @@ function normalizeKey(key: string): string | null {
   return key; // F1, Enter, Escape, `, etc.
 }
 
-export function Settings({ onClose }: Props) {
+export function Settings({ onClose, disabled, onToggleModule }: Props) {
   const [config, setConfig] = useState<Config | null>(null);
   const [recording, setRecording] = useState(false);
   const tools = getTools();
@@ -118,21 +124,39 @@ export function Settings({ onClose }: Props) {
         </div>
 
         <div className="bk-field">
-          <span className="bk-label">INSTALLED TOOLS · {tools.length}</span>
+          <span className="bk-label">MODULES · {tools.length}</span>
           <ul className="bk-toollist">
-            {tools.map((t) => (
-              <li key={t.id} className="bk-toollist__item">
-                <span className="bk-toollist__icon">
-                  <t.icon size={18} />
-                </span>
-                <span className="bk-toollist__text">
-                  <strong>{t.name}</strong>
-                  <em>{t.description}</em>
-                </span>
-                <span className="bk-toollist__kind">{t.kind.toUpperCase()}</span>
-              </li>
-            ))}
+            {tools.map((t) => {
+              const enabled = !disabled.includes(t.id);
+              return (
+                <li
+                  key={t.id}
+                  className={`bk-toollist__item ${enabled ? "" : "bk-toollist__item--off"}`}
+                >
+                  <span className="bk-toollist__icon">
+                    <t.icon size={18} />
+                  </span>
+                  <span className="bk-toollist__text">
+                    <strong>{t.name}</strong>
+                    <em>{t.description}</em>
+                  </span>
+                  <span className="bk-toollist__kind">{t.kind.toUpperCase()}</span>
+                  <label className="bk-toggle" title={enabled ? "Disable module" : "Enable module"}>
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(e) => void onToggleModule(t.id, e.target.checked)}
+                      aria-label={`${t.name} enabled`}
+                    />
+                  </label>
+                </li>
+              );
+            })}
           </ul>
+          <em className="bk-settings__note">
+            Off = hidden from the grid and any background work (clipboard watch, pinger) stops —
+            toggle modules off to cut resource usage.
+          </em>
         </div>
       </div>
     </section>

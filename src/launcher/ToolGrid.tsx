@@ -3,12 +3,14 @@ import { ToolTile } from "./ToolTile";
 
 type Props = {
   tools: ToolModule[];
+  /** Index to ring, or -1 for none (highlight follows hover / keyboard only). */
   selectedIndex: number;
   onSelect: (tool: ToolModule) => void;
   onHover: (index: number) => void;
+  onLeave: () => void;
 };
 
-export function ToolGrid({ tools, selectedIndex, onSelect, onHover }: Props) {
+export function ToolGrid({ tools, selectedIndex, onSelect, onHover, onLeave }: Props) {
   if (tools.length === 0) {
     return (
       <div className="bk-grid__empty">
@@ -26,6 +28,7 @@ export function ToolGrid({ tools, selectedIndex, onSelect, onHover }: Props) {
           selected={i === selectedIndex}
           onSelect={() => onSelect(tool)}
           onHover={() => onHover(i)}
+          onLeave={onLeave}
         />
       ))}
     </div>

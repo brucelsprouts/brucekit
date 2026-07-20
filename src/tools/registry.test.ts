@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { buildRegistry, searchTools, validateModule } from "./registry";
+import { buildRegistry, filterDisabled, searchTools, validateModule } from "./registry";
 import type { ToolModule } from "./types";
 
 const Icon = () => null;
@@ -95,5 +95,32 @@ describe("searchTools", () => {
 
   it("filters out non-matches", () => {
     expect(searchTools(tools, "zzzz")).toEqual([]);
+  });
+});
+
+describe("filterDisabled", () => {
+  const tools = [
+    mod({ id: "clipstack", name: "ClipStack" }),
+    mod({ id: "dcheck", name: "dcheck" }),
+    mod({ id: "color-picker", name: "Color picker" }),
+  ];
+
+  it("returns the same list when nothing is disabled", () => {
+    expect(filterDisabled(tools, [])).toBe(tools);
+  });
+
+  it("hides exactly the disabled ids", () => {
+    expect(filterDisabled(tools, ["dcheck"]).map((t) => t.id)).toEqual([
+      "clipstack",
+      "color-picker",
+    ]);
+  });
+
+  it("ignores disabled ids that aren't installed", () => {
+    expect(filterDisabled(tools, ["ghost-module"])).toHaveLength(3);
+  });
+
+  it("can hide everything", () => {
+    expect(filterDisabled(tools, ["clipstack", "dcheck", "color-picker"])).toEqual([]);
   });
 });

@@ -4,6 +4,8 @@ mod tray;
 mod window;
 
 use commands::capture::AppState;
+use commands::clips::ClipsState;
+use commands::dcheck::DcheckState;
 
 /// Hotkey/tray → launcher: freshly opened, reset to the tool grid.
 pub const EV_RESET: &str = "brucekit://reset";
@@ -23,6 +25,8 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::default())
+        .manage(ClipsState::default())
+        .manage(DcheckState::default())
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -30,6 +34,10 @@ pub fn run() {
             if let Err(e) = hotkey::register(&handle, &cfg.hotkey) {
                 eprintln!("[brucekit] hotkey registration failed: {e}");
             }
+
+            // Background services (clipboard monitor, pinger) run only for
+            // modules the user hasn't toggled off.
+            commands::start_enabled_services(&handle, &cfg);
 
             // Warm the overlay webview now so the first capture shows instantly.
             if let Err(e) = window::ensure_overlay(&handle) {
@@ -50,6 +58,14 @@ pub fn run() {
             commands::config::set_config,
             commands::config::set_hotkey,
             commands::config::set_autostart,
+            commands::config::set_module_enabled,
+            commands::clips::clips_list,
+            commands::clips::clips_copy,
+            commands::clips::clips_toggle_pin,
+            commands::clips::clips_delete,
+            commands::clips::clips_clear,
+            commands::dcheck::dcheck_history,
+            commands::dcheck::dcheck_clear,
         ])
         .run(tauri::generate_context!())
         .expect("error while running brucekit");

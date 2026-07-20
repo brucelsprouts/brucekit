@@ -21,8 +21,24 @@ export type CaptureMeta = CaptureDims & {
 export type Config = {
   hotkey: string;
   launchOnStartup: boolean;
+  /** Module ids toggled off: hidden from the grid, background services stopped. */
+  disabledModules: string[];
   tools: Record<string, Record<string, unknown>>;
 };
+
+/** One clipboard history entry (clipstack module). */
+export type Clip = {
+  id: number;
+  text: string;
+  pinned: boolean;
+  /** Unix millis. */
+  createdAt: number;
+};
+
+export type PingStatus = "ok" | "high" | "drop";
+
+/** One ping sample (dcheck module). `ms` is -1 on a drop. */
+export type PingEntry = { ts: number; ms: number; status: PingStatus };
 
 type CommandMap = {
   /** Freeze the monitor under the cursor into Rust memory and show the overlay. */
@@ -42,6 +58,21 @@ type CommandMap = {
   set_config: { args: { config: Config }; result: Config };
   set_hotkey: { args: { chord: string }; result: null };
   set_autostart: { args: { enabled: boolean }; result: null };
+  /** Toggle a module: persists + starts/stops its background service. */
+  set_module_enabled: { args: { id: string; enabled: boolean }; result: Config };
+
+  /** clipstack: list clips (pinned first, newest first), optionally filtered. */
+  clips_list: { args: { search: string | null }; result: Clip[] };
+  /** clipstack: write a clip's text back to the OS clipboard. */
+  clips_copy: { args: { id: number }; result: null };
+  clips_toggle_pin: { args: { id: number }; result: null };
+  clips_delete: { args: { id: number }; result: null };
+  clips_clear: { args: void; result: null };
+
+  /** dcheck: ping history, oldest first. null/0 rangeSec = everything. */
+  dcheck_history: { args: { rangeSec: number | null }; result: PingEntry[] };
+  /** dcheck: wipe in-memory history and the on-disk log. */
+  dcheck_clear: { args: void; result: null };
 };
 
 type Args<K extends keyof CommandMap> = CommandMap[K]["args"];

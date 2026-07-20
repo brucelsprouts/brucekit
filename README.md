@@ -29,6 +29,16 @@ shows up.
 - **🎨 Color picker + eyedropper** — dial a color in by hand (hex field or R/G/B
   sliders) *or* eyedrop any pixel on your screen, complete with a magnifier loupe.
   Copy it as HEX, RGB, or HSL.
+- **📋 ClipStack** — clipboard history (ported from my
+  [clipstack](https://github.com/brucelsprouts/clipstack) app). A background
+  watcher captures what you copy; search it, pin favorites, click to re-copy.
+- **📶 dcheck** — network dropout monitor (ported from my
+  [dcheck](https://github.com/brucelsprouts/dcheck) app). Pings a target on an
+  interval and draws a live graph of latency, high-latency spikes, and drops,
+  with uptime stats and a persistent log.
+- **🔌 Module toggles** — every module can be switched off in Settings. Off means
+  gone: hidden from the grid *and* its background work (clipboard watcher,
+  pinger) fully stopped — so a leaner brucekit is one checkbox away.
 
 Everything is **local**. No backend, no database, no telemetry, no cloud. Your
 config is a plain JSON file on your machine.
@@ -121,8 +131,9 @@ src/                       React — the interface
   tools/                     the ToolModule contract, auto-registry, and the tools
 src-tauri/src/             Rust — the native core
   lib.rs window.rs hotkey.rs tray.rs
-  commands/  capture.rs  ocr.rs  color.rs  config.rs
+  commands/  capture.rs  ocr.rs  color.rs  config.rs  clips.rs  dcheck.rs
 docs/brucekit-spec.md      the design this was built from
+docs/module-ideas.md       sketches for what's next
 ```
 
 ## What's next

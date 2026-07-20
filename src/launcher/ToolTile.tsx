@@ -5,9 +5,10 @@ type Props = {
   selected: boolean;
   onSelect: () => void;
   onHover: () => void;
+  onLeave: () => void;
 };
 
-export function ToolTile({ tool, selected, onSelect, onHover }: Props) {
+export function ToolTile({ tool, selected, onSelect, onHover, onLeave }: Props) {
   const Icon = tool.icon;
   return (
     <button
@@ -15,6 +16,7 @@ export function ToolTile({ tool, selected, onSelect, onHover }: Props) {
       className={`bk-tile ${selected ? "is-selected" : ""}`}
       onClick={onSelect}
       onMouseEnter={onHover}
+      onMouseLeave={onLeave}
       aria-pressed={selected}
       data-tool-id={tool.id}
       title={tool.description ?? tool.name}

@@ -18,3 +18,9 @@ export type OcrDonePayload = { text: string; error?: string };
 
 /** Overlay → launcher: the user aborted the capture (Esc / right-click). */
 export const EV_CAPTURE_CANCELED = "brucekit://capture-canceled";
+
+/** Rust → launcher: the clipstack monitor captured a new clip; refetch. */
+export const EV_CLIP_ADDED = "brucekit://clip-added";
+
+/** Rust → launcher: a dcheck ping completed (payload: PingEntry). */
+export const EV_PING = "brucekit://ping";

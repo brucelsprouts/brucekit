@@ -90,6 +90,13 @@ export function searchTools(tools: ToolModule[], query: string): ToolModule[] {
   return scored.map((s) => s.tool);
 }
 
+/** Hide modules the user toggled off (pure; unit-tested). */
+export function filterDisabled(tools: ToolModule[], disabled: string[]): ToolModule[] {
+  if (disabled.length === 0) return tools;
+  const off = new Set(disabled);
+  return tools.filter((tool) => !off.has(tool.id));
+}
+
 function scoreTool(tool: ToolModule, q: string): number {
   const name = tool.name.toLowerCase();
   if (name === q) return 100;

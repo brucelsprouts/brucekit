@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { search } from "../tools/registry";
+import { filterDisabled, search } from "../tools/registry";
 import type { ToolContext, ToolModule } from "../tools/types";
-import { invoke } from "../core/ipc";
+import { errorMessage, invoke } from "../core/ipc";
 import { toast } from "../core/toast";
 import { makeToolSettings } from "../core/settings";
 import { EV_OPEN_SETTINGS, EV_RESET } from "../core/events";
@@ -21,8 +21,34 @@ export function Launcher() {
   const [selected, setSelected] = useState(0);
   const [activeTool, setActiveTool] = useState<ToolModule | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [disabled, setDisabled] = useState<string[]>([]);
+  // Show the selection ring only while the mouse is over a tile or the user is
+  // keyboard-navigating — never linger on a tile the mouse merely passed over.
+  const [highlightOn, setHighlightOn] = useState(true);
+  // Grabbing the header to drag makes the webview lose focus for a beat as the
+  // native move loop starts; ignore any blur until this moment passes so the
+  // click-away dismiss doesn't fire mid-drag.
+  const suppressBlurUntil = useRef(0);
 
-  const results = useMemo(() => search(query), [query]);
+  const results = useMemo(() => filterDisabled(search(query), disabled), [query, disabled]);
+
+  // Toggled-off modules stay out of the grid; the list comes from config.
+  useEffect(() => {
+    invoke("get_config")
+      .then((cfg) => setDisabled(cfg.disabledModules ?? []))
+      .catch(() => {
+        /* outside a Tauri webview (browser preview) — all modules shown */
+      });
+  }, []);
+
+  const toggleModule = useCallback(async (id: string, enabled: boolean) => {
+    try {
+      const cfg = await invoke("set_module_enabled", { id, enabled });
+      setDisabled(cfg.disabledModules ?? []);
+    } catch (err) {
+      toast(errorMessage(err), { kind: "error" });
+    }
+  }, []);
 
   useEffect(() => {
     setSelected((s) => clamp(s, 0, Math.max(0, results.length - 1)));
@@ -91,10 +117,12 @@ export function Launcher() {
     let unlisten: Promise<() => void> | null = null;
     try {
       unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-        if (!focused) {
-          setSettingsOpen(false);
-          void closeLauncher();
-        }
+        if (focused) return;
+        // A blur inside the grab window is the native drag starting, not a
+        // click-away — ignore it so the window survives being dragged.
+        if (Date.now() < suppressBlurUntil.current) return;
+        setSettingsOpen(false);
+        void closeLauncher();
       });
     } catch {
       /* outside a Tauri webview (browser preview) — no focus tracking */
@@ -112,6 +140,7 @@ export function Launcher() {
       setSelected(0);
       setActiveTool(null);
       setSettingsOpen(false);
+      setHighlightOn(true);
     })
       .then((un) => disposers.push(un))
       .catch(() => {});
@@ -133,18 +162,22 @@ export function Launcher() {
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
+          setHighlightOn(true);
           setSelected((s) => clamp(s + GRID_COLS, 0, results.length - 1));
           break;
         case "ArrowUp":
           e.preventDefault();
+          setHighlightOn(true);
           setSelected((s) => clamp(s - GRID_COLS, 0, results.length - 1));
           break;
         case "ArrowRight":
           e.preventDefault();
+          setHighlightOn(true);
           setSelected((s) => clamp(s + 1, 0, results.length - 1));
           break;
         case "ArrowLeft":
           e.preventDefault();
+          setHighlightOn(true);
           setSelected((s) => clamp(s - 1, 0, results.length - 1));
           break;
         case "Enter":
@@ -164,12 +197,31 @@ export function Launcher() {
       <span className="bk-frame bk-frame--bl" aria-hidden="true" />
       <span className="bk-frame bk-frame--br" aria-hidden="true" />
 
-      <header className="bk-sysbar" aria-hidden="true">
+      {/* Grab the header to move the window. We drive the drag ourselves (rather
+          than data-tauri-drag-region) so we can suppress the click-away dismiss
+          for the focus blip the OS move loop causes. */}
+      <header
+        className="bk-sysbar"
+        aria-hidden="true"
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          suppressBlurUntil.current = Date.now() + 1000;
+          try {
+            void getCurrentWindow().startDragging().catch(() => {});
+          } catch {
+            /* outside a Tauri webview (browser preview) — nothing to drag */
+          }
+        }}
+      >
         <span className="bk-sysbar__id">BRUCEKIT</span>
       </header>
 
       {settingsOpen ? (
-        <Settings onClose={() => setSettingsOpen(false)} />
+        <Settings
+          onClose={() => setSettingsOpen(false)}
+          disabled={disabled}
+          onToggleModule={toggleModule}
+        />
       ) : activeTool && activeCtx ? (
         <ToolHost tool={activeTool} ctx={activeCtx} onBack={() => setActiveTool(null)} />
       ) : (
@@ -180,6 +232,7 @@ export function Launcher() {
               onChange={(v) => {
                 setQuery(v);
                 setSelected(0);
+                setHighlightOn(true);
               }}
               resultCount={results.length}
             />
@@ -198,9 +251,13 @@ export function Launcher() {
           </div>
           <ToolGrid
             tools={results}
-            selectedIndex={selected}
+            selectedIndex={highlightOn ? selected : -1}
             onSelect={dispatchTool}
-            onHover={setSelected}
+            onHover={(i) => {
+              setSelected(i);
+              setHighlightOn(true);
+            }}
+            onLeave={() => setHighlightOn(false)}
           />
           <footer className="bk-launcher__hint">
             <span>[↵] launch</span>
