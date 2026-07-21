@@ -213,6 +213,33 @@ export function panBy(view: View, spanMs: number, dxFraction: number): number {
   return view.endMs - dxFraction * spanMs;
 }
 
+/**
+ * Span that reaches back far enough to contain `seconds` of *monitoring*.
+ *
+ * The range buttons mean "the last 6 hours of pings", not "the last 6 hours on
+ * the clock" — brucekit only pings while it's running, so a wall-clock window
+ * over an overnight stretch selects almost no data and every range renders the
+ * same picture. Walking back sample by sample and counting only the time the
+ * monitor was actually up keeps 1H / 6H / 12H distinct.
+ *
+ * Time between sessions is skipped rather than counted, so the returned span is
+ * wall-clock (what `resolveView` wants) but sized by active duration.
+ */
+export function spanForActiveSeconds(entries: PingEntry[], seconds: number): number {
+  if (entries.length === 0) return MIN_SPAN_MS;
+  const targetMs = seconds * 1000;
+  const newest = entries[entries.length - 1].ts;
+  let active = 0;
+  for (let i = entries.length - 1; i > 0; i--) {
+    const step = entries[i].ts - entries[i - 1].ts;
+    // A jump this large is the app having been off; it costs no active time.
+    if (step <= GAP_THRESHOLD_MS) active += step;
+    if (active >= targetMs) return newest - entries[i - 1].ts + LIVE_PAD_MS;
+  }
+  // Less data than asked for — show all of it.
+  return newest - entries[0].ts + LIVE_PAD_MS;
+}
+
 /** Full extent of the data, for the ALL range. */
 export function fullSpan(entries: PingEntry[]): number {
   if (entries.length < 2) return MIN_SPAN_MS;

@@ -13,6 +13,7 @@ import {
   MIN_SPAN_MS,
   panBy,
   resolveView,
+  spanForActiveSeconds,
   zoomAt,
 } from "./graph";
 
@@ -230,6 +231,46 @@ describe("panBy", () => {
     // Dragging right by a quarter of the plot shows a quarter-span earlier.
     expect(panBy(view, 100_000, 0.25)).toBe(75_000);
     expect(panBy(view, 100_000, -0.25)).toBe(125_000);
+  });
+});
+
+describe("spanForActiveSeconds", () => {
+  it("matches wall time when the monitor never stopped", () => {
+    // Continuous 10-minute run, ask for the last 5 minutes of it.
+    const entries = Array.from({ length: 121 }, (_, i) => ok(i * 5000));
+    expect(spanForActiveSeconds(entries, 300)).toBeCloseTo(300_000 + 60_000, -3);
+  });
+
+  it("reaches past an offline stretch to find real samples", () => {
+    // 5 min of pings, app off for 10 hours, then 5 more min. Asking for an
+    // hour of *monitoring* must reach back through the dead time to the
+    // earlier session, not stop at the hour boundary and find nothing.
+    const tenHours = 36_000_000;
+    const first = Array.from({ length: 61 }, (_, i) => ok(i * 5000));
+    const second = Array.from({ length: 61 }, (_, i) => ok(tenHours + i * 5000));
+    const span = spanForActiveSeconds([...first, ...second], 3600);
+
+    const view = resolveView([...first, ...second], span, true, null);
+    expect(view.startMs).toBeLessThanOrEqual(0);
+  });
+
+  it("stops once it has the requested amount of active time", () => {
+    // 30 min continuous; asking for 5 min must not drag in all of it.
+    const entries = Array.from({ length: 361 }, (_, i) => ok(i * 5000));
+    const span = spanForActiveSeconds(entries, 300);
+    const view = resolveView(entries, span, true, null);
+
+    expect(view.startMs).toBeGreaterThan(1_500_000 - 400_000);
+  });
+
+  it("falls back to the whole log when there isn't that much data yet", () => {
+    const entries = [ok(0), ok(5000), ok(10_000)];
+    const span = spanForActiveSeconds(entries, 3600);
+    expect(span).toBeGreaterThanOrEqual(10_000);
+  });
+
+  it("survives an empty log", () => {
+    expect(spanForActiveSeconds([], 3600)).toBe(MIN_SPAN_MS);
   });
 });
 

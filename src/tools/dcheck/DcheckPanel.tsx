@@ -17,6 +17,7 @@ import {
   PAD,
   panBy,
   resolveView,
+  spanForActiveSeconds,
   zoomAt,
   type Segment,
 } from "./graph";
@@ -131,11 +132,22 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
     void loadHistory();
   }, [loadHistory]);
 
+  // The opening view is the default range too, so size it by monitoring time
+  // like the buttons do — otherwise the first thing you see is the one view
+  // measured in wall-clock hours. Runs once, and never fights a zoom or pan.
+  const sizedInitialSpan = useRef(false);
+  useEffect(() => {
+    if (sizedInitialSpan.current || entries.length === 0) return;
+    sizedInitialSpan.current = true;
+    setSpanMs(spanForActiveSeconds(entries, DEFAULT_RANGE_SEC));
+  }, [entries]);
+
   /** Jump to a preset range and resume following the live edge. */
   const selectRange = useCallback(
     (sec: number) => {
       setRange(sec);
-      setSpanMs(sec === 0 ? fullSpan(entries) : sec * 1000);
+      // Sized by monitoring time, not wall time — see spanForActiveSeconds.
+      setSpanMs(sec === 0 ? fullSpan(entries) : spanForActiveSeconds(entries, sec));
       setLive(true);
       setAnchorEnd(null);
     },
@@ -498,6 +510,12 @@ export function drawGraph(
   // ── Time labels + vertical rules, per segment ──
   g.textAlign = "center";
   g.textBaseline = "top";
+  // A segment labels both its edges, so where two segments butt together — any
+  // time the gaps are hidden — the left one's closing label and the right one's
+  // opening label land on the same pixel and overprint. Track what was drawn
+  // and skip anything that would collide with it.
+  const LABEL_W = 52;
+  let lastLabelX = -Infinity;
   for (const seg of segments) {
     const labelCount = Math.max(1, Math.min(5, Math.floor(seg.xWidth / 50)));
     for (let i = 0; i <= labelCount; i++) {
@@ -514,6 +532,8 @@ export function drawGraph(
         g.stroke();
         g.setLineDash([]);
       }
+      if (x - lastLabelX < LABEL_W) continue;
+      lastLabelX = x;
       g.fillStyle = COL_AXIS;
       g.fillText(formatClock(t), x, pY + pH + 6);
     }
