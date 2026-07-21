@@ -135,6 +135,16 @@ export function OcrPanel({ ctx }: { ctx: ToolContext }) {
           <OcrIcon size={18} />
           <span>{status === "scanning" ? "Drag a region…" : hasText ? "Scan again" : "Scan region"}</span>
         </button>
+        {/* Copy sits with Scan because scanning then copying is the flow — the
+            two belong side by side. Clear stays down by the result it clears. */}
+        <button
+          type="button"
+          className="bk-action bk-action--inline"
+          onClick={copy}
+          disabled={!hasText}
+        >
+          Copy
+        </button>
         <span className={`bk-ocr__state bk-ocr__state--${status}`} aria-live="polite">
           <span className="bk-ocr__dot" aria-hidden="true" />
           {status === "scanning"
@@ -180,14 +190,6 @@ export function OcrPanel({ ctx }: { ctx: ToolContext }) {
                 disabled={!hasText}
               >
                 Clear
-              </button>
-              <button
-                type="button"
-                className="bk-btn bk-btn--sm bk-btn--accent"
-                onClick={copy}
-                disabled={!hasText}
-              >
-                Copy
               </button>
             </>
           )}

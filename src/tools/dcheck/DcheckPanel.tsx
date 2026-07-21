@@ -73,6 +73,12 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
   const [intervalDraft, setIntervalDraft] = useState(String(DEFAULTS.intervalSec));
   const [thresholdDraft, setThresholdDraft] = useState(String(DEFAULTS.thresholdMs));
   const [confirmClear, setConfirmClear] = useState(false);
+  /**
+   * Collapse the off-app stretches to nothing instead of marking them. Applies
+   * immediately rather than on Apply — it's a way of looking at the data, not a
+   * setting the pinger needs to hear about.
+   */
+  const [hideGaps, setHideGaps] = useState(false);
   /** Cursor x within the canvas, in CSS px — null when not hovering. */
   const [hoverX, setHoverX] = useState<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -96,12 +102,14 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
       ctx.settings.get<string>("target", DEFAULTS.target),
       ctx.settings.get<number>("intervalSec", DEFAULTS.intervalSec),
       ctx.settings.get<number>("thresholdMs", DEFAULTS.thresholdMs),
+      ctx.settings.get<boolean>("hideGaps", false),
     ])
-      .then(([t, i, th]) => {
+      .then(([t, i, th, hide]) => {
         if (!alive) return;
         setTarget(t);
         setIntervalDraft(String(i));
         setThresholdDraft(String(th));
+        setHideGaps(hide);
       })
       .catch(() => {});
     return () => {
@@ -150,8 +158,8 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
   // Redraw whenever the visible slice, threshold, or hover position changes.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas) drawGraph(canvas, visible, threshold, hoverX);
-  }, [visible, threshold, hoverX]);
+    if (canvas) drawGraph(canvas, visible, threshold, hoverX, hideGaps);
+  }, [visible, threshold, hoverX, hideGaps]);
 
   // The canvas is sized by CSS; repaint on resize so the plot stays sharp and
   // the collapsed-gap layout re-flows to the new width.
@@ -159,11 +167,11 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
     const canvas = canvasRef.current;
     if (!canvas || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
-      drawGraph(canvas, visible, threshold, hoverX);
+      drawGraph(canvas, visible, threshold, hoverX, hideGaps);
     });
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [visible, threshold, hoverX]);
+  }, [visible, threshold, hoverX, hideGaps]);
 
   /** Scroll to zoom, anchored on the instant under the cursor. */
   const onWheel = useCallback(
@@ -172,7 +180,14 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const px = e.clientX - rect.left;
-      const segments = buildSegments(visible, PAD.left, rect.width - PAD.left - PAD.right);
+      // Same layout the canvas drew with, or the zoom anchors on the wrong
+      // instant whenever the gaps are hidden.
+      const segments = buildSegments(
+        visible,
+        PAD.left,
+        rect.width - PAD.left - PAD.right,
+        hideGaps ? 0 : GAP_SEPARATOR_W,
+      );
       const anchorTs = mapXInverse(segments, px);
       if (anchorTs === null) return;
       const next = zoomAt(view, spanMs, anchorTs, e.deltaY);
@@ -180,7 +195,7 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
       setAnchorEnd(next.endMs);
       setLive(false);
     },
-    [visible, view, spanMs],
+    [visible, view, spanMs, hideGaps],
   );
 
   // Drag to pan. The move/up listeners live on the window so a drag that
@@ -205,6 +220,17 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
       window.removeEventListener("mouseup", onUp);
     };
   }, [view, spanMs]);
+
+  /** View-only, so it takes effect on the spot and persists on its own. */
+  async function toggleHideGaps() {
+    const next = !hideGaps;
+    setHideGaps(next);
+    try {
+      await ctx.settings.set("hideGaps", next);
+    } catch {
+      /* non-fatal: the view still changed for this session */
+    }
+  }
 
   async function applySettings() {
     const intervalSec = clampInt(intervalDraft, 1, 3600, DEFAULTS.intervalSec);
@@ -273,6 +299,19 @@ export function DcheckPanel({ ctx }: { ctx: ToolContext }) {
             Live
           </button>
         )}
+        <button
+          type="button"
+          className={`bk-btn bk-btn--sm ${hideGaps ? "is-active" : ""}`}
+          aria-pressed={hideGaps}
+          onClick={() => void toggleHideGaps()}
+          title={
+            hideGaps
+              ? "Show the stretches where the monitor wasn't running"
+              : "Collapse the stretches where the monitor wasn't running"
+          }
+        >
+          {hideGaps ? "Gaps hidden" : "Hide gaps"}
+        </button>
       </div>
 
       <canvas
@@ -400,6 +439,7 @@ export function drawGraph(
   entries: PingEntry[],
   thresholdMs: number,
   hoverX: number | null,
+  hideGaps = false,
 ) {
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || 300;
@@ -429,7 +469,8 @@ export function drawGraph(
 
   const yMax = computeYMax(entries);
   const mapY = (ms: number) => pY + pH - (Math.min(ms, yMax) / yMax) * pH;
-  const segments = buildSegments(entries, pX, pW);
+  const gapW = hideGaps ? 0 : GAP_SEPARATOR_W;
+  const segments = buildSegments(entries, pX, pW, gapW);
   const x0 = (ts: number) => mapX(segments, ts);
 
   // ── Grid: horizontal rules + y labels ──
@@ -490,21 +531,23 @@ export function drawGraph(
     g.setLineDash([]);
   }
 
-  // ── Collapsed-gap separators ──
-  for (let s = 0; s < segments.length - 1; s++) {
-    const gapX = segments[s].xStart + segments[s].xWidth;
-    g.fillStyle = COL_GAP_FILL;
-    g.fillRect(gapX, pY, GAP_SEPARATOR_W, pH);
-    g.strokeStyle = COL_GAP_LINE;
-    g.lineWidth = 1;
-    g.setLineDash([2, 2]);
-    for (const gx of [gapX, gapX + GAP_SEPARATOR_W]) {
-      g.beginPath();
-      g.moveTo(gx, pY);
-      g.lineTo(gx, pY + pH);
-      g.stroke();
+  // ── Collapsed-gap separators (nothing to mark when they're hidden) ──
+  if (!hideGaps) {
+    for (let s = 0; s < segments.length - 1; s++) {
+      const gapX = segments[s].xStart + segments[s].xWidth;
+      g.fillStyle = COL_GAP_FILL;
+      g.fillRect(gapX, pY, gapW, pH);
+      g.strokeStyle = COL_GAP_LINE;
+      g.lineWidth = 1;
+      g.setLineDash([2, 2]);
+      for (const gx of [gapX, gapX + gapW]) {
+        g.beginPath();
+        g.moveTo(gx, pY);
+        g.lineTo(gx, pY + pH);
+        g.stroke();
+      }
+      g.setLineDash([]);
     }
-    g.setLineDash([]);
   }
 
   // ── Disconnect bars (red, with a glow) ──
@@ -573,7 +616,7 @@ export function drawGraph(
   g.stroke();
 
   if (hoverX !== null && hoverX >= pX && hoverX <= pX + pW) {
-    drawHover(g, entries, segments, { pX, pY, pW, pH }, hoverX, x0, mapY);
+    drawHover(g, entries, segments, { pX, pY, pW, pH }, hoverX, x0, mapY, gapW);
   }
 }
 
@@ -588,11 +631,13 @@ function drawHover(
   hoverX: number,
   x0: (ts: number) => number,
   mapY: (ms: number) => number,
+  gapW: number,
 ) {
-  // Hovering a collapsed gap reads out how long the app was off instead.
-  for (let s = 0; s < segments.length - 1; s++) {
+  // Hovering a collapsed gap reads out how long the app was off instead. With
+  // the gaps hidden there is no strip to hover, so this loop finds nothing.
+  for (let s = 0; gapW > 0 && s < segments.length - 1; s++) {
     const gapX = segments[s].xStart + segments[s].xWidth;
-    if (hoverX >= gapX && hoverX <= gapX + GAP_SEPARATOR_W) {
+    if (hoverX >= gapX && hoverX <= gapX + gapW) {
       const text = `OFF ${formatGap(segments[s + 1].startMs - segments[s].endMs)}`;
       g.font = FONT_SM;
       const boxW = g.measureText(text).width + 16;

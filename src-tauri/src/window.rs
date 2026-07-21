@@ -144,9 +144,18 @@ pub struct KeepOpen(pub AtomicBool);
 /// Pin/unpin the launcher against click-away dismissal. Esc, the close button,
 /// the tray toggle, and the hotkey all still close it — this only suppresses
 /// the blur-triggered hide.
+///
+/// Always-on-top rides along, inverted. A watched panel is one you leave up
+/// while working elsewhere, so it has to behave like an ordinary window and let
+/// other apps sit over it — floating above everything is what a transient
+/// launcher wants, not a dashboard. Everywhere else the launcher goes back on
+/// top, so the hotkey always brings it to the front.
 #[tauri::command]
 pub fn set_keep_open<R: Runtime>(app: AppHandle<R>, enabled: bool) {
     app.state::<KeepOpen>().0.store(enabled, Ordering::Relaxed);
+    if let Some(win) = app.get_webview_window("launcher") {
+        let _ = win.set_always_on_top(!enabled);
+    }
 }
 
 /// Launcher lost focus: dismiss unless it's pinned open, or the cursor says

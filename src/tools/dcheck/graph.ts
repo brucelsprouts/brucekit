@@ -34,11 +34,17 @@ export type Segment = {
 /**
  * Split entries into continuous segments and lay them out across `plotW`,
  * proportional to each segment's active duration.
+ *
+ * `gapW` is the width each stretch of dead time gets. Pass 0 to hide the
+ * inactive intervals entirely: the segments butt together and read as one
+ * continuous trace, which is what you want when only the pings matter and the
+ * app's on/off history is noise.
  */
 export function buildSegments(
   entries: PingEntry[],
   plotX: number,
   plotW: number,
+  gapW: number = GAP_SEPARATOR_W,
 ): Segment[] {
   if (entries.length === 0) return [];
 
@@ -60,7 +66,7 @@ export function buildSegments(
     xWidth: 0,
   }));
 
-  const activeWidth = plotW - (segments.length - 1) * GAP_SEPARATOR_W;
+  const activeWidth = plotW - (segments.length - 1) * gapW;
   const totalActive = segments.reduce(
     (sum, s) => sum + Math.max(s.endMs - s.startMs, 1),
     0,
@@ -72,7 +78,7 @@ export function buildSegments(
     // A single-sample segment has zero duration; give it a hairline so the
     // layout stays stable and its point is still drawable.
     seg.xWidth = (Math.max(seg.endMs - seg.startMs, 1) / totalActive) * activeWidth;
-    cumX += seg.xWidth + GAP_SEPARATOR_W;
+    cumX += seg.xWidth + gapW;
   }
   return segments;
 }

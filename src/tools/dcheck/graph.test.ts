@@ -42,6 +42,31 @@ describe("buildSegments", () => {
     expect(segs[1].xStart).toBeCloseTo(segs[0].xWidth + GAP_SEPARATOR_W);
   });
 
+  it("butts segments together when the dead time is hidden", () => {
+    // "Hide inactive intervals": the separators go, so the sessions read as
+    // one continuous trace and all the width goes to real samples.
+    const hour = 3_600_000;
+    const entries = [ok(0), ok(10_000), ok(hour), ok(hour + 10_000)];
+    const segs = buildSegments(entries, 0, 314, 0);
+
+    expect(segs).toHaveLength(2);
+    expect(segs[0].xWidth).toBeCloseTo(157);
+    expect(segs[1].xStart).toBeCloseTo(157);
+    // No pixels lost to dead time.
+    expect(segs[0].xWidth + segs[1].xWidth).toBeCloseTo(314);
+  });
+
+  it("still maps a timestamp into the right place with gaps hidden", () => {
+    const hour = 3_600_000;
+    const entries = [ok(0), ok(10_000), ok(hour), ok(hour + 10_000)];
+    const segs = buildSegments(entries, 0, 314, 0);
+
+    expect(mapX(segs, 0)).toBeCloseTo(0);
+    expect(mapX(segs, 10_000)).toBeCloseTo(157);
+    expect(mapX(segs, hour)).toBeCloseTo(157);
+    expect(mapX(segs, hour + 10_000)).toBeCloseTo(314);
+  });
+
   it("weights segments by their own active duration", () => {
     const hour = 3_600_000;
     // 30s session, then a 10s session.

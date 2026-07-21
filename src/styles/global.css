@@ -873,7 +873,11 @@ code {
 .bk-ocr__state {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  /* Takes the slack between the buttons and the right edge, so the readout
+     rides the far end of the bar rather than crowding Copy. */
+  flex: 1;
   min-width: 0;
   font-size: var(--bk-fs-label);
   letter-spacing: var(--bk-tracking);
@@ -1137,6 +1141,14 @@ code {
 .bk-btn--sm {
   padding: 4px 9px;
   font-size: var(--bk-fs-label);
+}
+/* A button that is also a state — dcheck's gap toggle. Matches the segmented
+   control's on-look so "pressed" reads the same wherever it appears. */
+.bk-btn.is-active {
+  background: var(--bk-accent-soft);
+  border-color: var(--bk-accent-line);
+  color: var(--bk-accent);
+  text-shadow: var(--bk-text-glow);
 }
 
 /* --------------------------------------------------------- toaster */
