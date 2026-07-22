@@ -8,8 +8,6 @@ use tauri::{
 };
 use xcap::Monitor;
 
-use crate::commands::config::Config;
-
 /// The monitor currently under the cursor (spec §3.3, "monitor under the cursor").
 pub fn active_monitor<R: Runtime>(app: &AppHandle<R>) -> Result<Monitor, String> {
     let pos = app.cursor_position().map_err(|e| e.to_string())?;
@@ -184,11 +182,34 @@ pub fn on_launcher_blur<R: Runtime>(window: &tauri::Window<R>) {
     }
 }
 
-/// Restore the launcher to the size the user last dragged it to (startup).
-pub fn restore_launcher_size<R: Runtime>(app: &AppHandle<R>, cfg: &Config) {
-    let Some(size) = cfg.launcher_size else { return };
-    let Some(win) = app.get_webview_window("launcher") else { return };
-    let _ = win.set_size(LogicalSize::new(size.width, size.height));
+/// Resize the launcher to an explicit logical size, at the webview's request.
+///
+/// Two callers with two intents. The module grid measures its own content and
+/// asks for exactly that — its natural height moves with the pin count, so no
+/// fixed number is right for everyone and a stored one would be stale the
+/// moment a pin is added. A panel view instead asks for the size the user last
+/// dragged a panel to: dcheck's graph is meant to be lived in, and shrinking it
+/// back to grid dimensions every time you open it would be maddening.
+///
+/// Logical px throughout, so moving the window between monitors of different
+/// scale factors doesn't warp it.
+#[tauri::command]
+pub fn resize_launcher<R: Runtime>(
+    app: AppHandle<R>,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    if !(width.is_finite() && height.is_finite()) {
+        return Err("invalid window size".into());
+    }
+    let win = app
+        .get_webview_window("launcher")
+        .ok_or_else(|| "no launcher window".to_string())?;
+    win.set_size(LogicalSize::new(
+        width.clamp(crate::commands::config::MIN_LAUNCHER_W, 4096.0),
+        height.clamp(crate::commands::config::MIN_LAUNCHER_H, 4096.0),
+    ))
+    .map_err(|e| e.to_string())
 }
 
 /// Show the launcher opened straight into one module (per-module hotkey).

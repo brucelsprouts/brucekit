@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { filterDisabled, getTools, search, sortPinned } from "../tools/registry";
@@ -15,6 +15,11 @@ import { NavBar } from "./NavBar";
 import { Settings } from "../components/Settings";
 
 const GRID_COLS = 4;
+
+/** Logical width the module grid sizes itself to: `GRID_COLS` tiles + gutters. */
+const GRID_WIDTH = 540;
+/** Panel size before the user has ever dragged one. */
+const DEFAULT_PANEL_SIZE = { width: 720, height: 520 };
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
@@ -69,6 +74,7 @@ export function Launcher() {
       .then((cfg) => {
         setDisabled(cfg.disabledModules ?? []);
         setPinned(cfg.pinnedModules ?? []);
+        if (cfg.launcherSize) panelSize.current = cfg.launcherSize;
       })
       .catch(() => {
         /* outside a Tauri webview (browser preview) — all modules shown */
@@ -146,6 +152,15 @@ export function Launcher() {
   );
 
   const atRoot = !settingsOpen && !activeTool;
+  // The scrolling module-grid column, measured to size the window to it.
+  const sectionsRef = useRef<HTMLDivElement | null>(null);
+  // Same flag, readable from the resize listener — that subscription is set up
+  // once, so it would otherwise close over `atRoot` as it stood on mount.
+  const atRootRef = useRef(atRoot);
+  atRootRef.current = atRoot;
+  // Panel size, mirrored out of config so opening a panel can size the window
+  // synchronously. Kept fresh by the resize listener below.
+  const panelSize = useRef(DEFAULT_PANEL_SIZE);
 
   // One implementation behind all three back affordances: Esc, mouse button 3,
   // and the ◀ control. Unwinds one level and records what it left for forward.
@@ -285,6 +300,57 @@ export function Launcher() {
     });
   }, [activeTool]);
 
+  // The grid fits the window to itself instead of sitting in whatever window it
+  // inherits. Its natural height moves with the pin count — a pinned section
+  // costs a divider plus a row — so no fixed height is right for every user,
+  // and the surplus shows up as a dead band between the last tile row and the
+  // hint footer.
+  //
+  // Height comes from summing the section's children, not from measuring the
+  // section itself: that box is the flex child that absorbs slack, so its size
+  // is a function of the window height we are trying to compute. The chrome
+  // around it (`box.top` above, the footer strip below) is height-independent
+  // precisely because the footer stays flush to the bottom.
+  // Deliberately a *layout* effect, and deliberately not deferred to a frame:
+  // the launcher spends most of its life hidden, and a hidden window's
+  // animation frames don't run. Measuring here reads the layout React has
+  // already committed, so the window is the right size before the hotkey ever
+  // shows it — rather than snapping to size a frame after it appears.
+  useLayoutEffect(() => {
+    if (!atRoot) return;
+    const sections = sectionsRef.current;
+    if (!sections) return;
+    const kids = Array.from(sections.children);
+    if (kids.length === 0) return;
+    const box = sections.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(sections).rowGap) || 0;
+    const content =
+      kids.reduce((h, el) => h + el.getBoundingClientRect().height, 0) +
+      gap * (kids.length - 1);
+    // A zero measurement means the webview has no usable layout yet. Sending it
+    // would clamp the window to its minimum and make that the size the user
+    // sees on open, so sit this round out — a later render will measure again.
+    if (content <= 0) return;
+    const height = Math.ceil(box.top + content + (window.innerHeight - box.bottom));
+    invoke("resize_launcher", { width: GRID_WIDTH, height }).catch(() => {
+      /* outside a Tauri webview (browser preview) — nothing to resize */
+    });
+  }, [atRoot, results.length, pinnedCount]);
+
+  // Opening a panel hands back the size the user last dragged a panel to.
+  // dcheck's graph is meant to be watched while you work in another window, so
+  // panels keep their own dimensions rather than inheriting the grid's.
+  //
+  // Read from the cached ref, not from a fresh `get_config`: that round-trip
+  // outlasts the render, so the panel would paint at the grid's compact size
+  // and then jump.
+  useLayoutEffect(() => {
+    if (atRoot) return;
+    invoke("resize_launcher", panelSize.current).catch(() => {
+      /* outside a Tauri webview (browser preview) — nothing to resize */
+    });
+  }, [atRoot]);
+
   // Persist the size the user drags the window to (debounced — the OS streams
   // resize events during the drag). Stored logical so DPI changes don't warp it.
   useEffect(() => {
@@ -293,16 +359,21 @@ export function Launcher() {
     try {
       const win = getCurrentWindow();
       unlisten = win.onResized(({ payload }) => {
+        // Only panels have a size worth remembering. The grid computes its own,
+        // and recording that would overwrite the panel size with a number the
+        // user never chose.
+        if (atRootRef.current) return;
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
           win
             .scaleFactor()
             .then((sf) => {
               const logical = payload.toLogical(sf);
-              return invoke("set_launcher_size", {
-                width: logical.width,
-                height: logical.height,
-              });
+              const size = { width: logical.width, height: logical.height };
+              // Mirror it back so the next panel opens at this size without
+              // waiting to re-read config.
+              panelSize.current = size;
+              return invoke("set_launcher_size", size);
             })
             .catch(() => {});
         }, 400);
@@ -438,7 +509,7 @@ export function Launcher() {
             </button>
           </div>
 
-          <div className="bk-launcher__sections">
+          <div className="bk-launcher__sections" ref={sectionsRef}>
             {pinnedCount > 0 && (
               <>
                 <div className="bk-divider" aria-hidden="true">

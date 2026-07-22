@@ -51,7 +51,14 @@ pub fn run() {
                 eprintln!("[brucekit] hotkey registration failed: {e}");
             }
 
-            window::restore_launcher_size(&handle, &cfg);
+            // The autostart entry records an absolute exe path, so it rots
+            // whenever the binary behind it moves — most brutally when the
+            // toggle was last flipped from a `tauri dev` run. Heal it here,
+            // while we know which executable is really running.
+            commands::config::reconcile_autostart(&handle);
+
+            // Nothing to restore size-wise: the launcher opens on the module
+            // grid, which measures itself once the webview has laid it out.
 
             // Background services (clipboard monitor, pinger) run only for
             // modules the user hasn't toggled off — and not at all in eco mode.
@@ -81,9 +88,11 @@ pub fn run() {
             commands::config::set_module_pinned,
             commands::config::set_eco_mode,
             commands::config::set_launcher_size,
+            window::resize_launcher,
             window::set_keep_open,
             commands::clips::clips_list,
             commands::clips::clips_copy,
+            commands::clips::clips_image,
             commands::clips::clips_toggle_pin,
             commands::clips::clips_delete,
             commands::clips::clips_clear,

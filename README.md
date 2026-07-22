@@ -31,7 +31,10 @@ shows up.
   Copy it as HEX, RGB, or HSL.
 - **📋 ClipStack** — clipboard history (ported from my
   [clipstack](https://github.com/brucelsprouts/clipstack) app). A background
-  watcher captures what you copy; search it, pin favorites, click to re-copy.
+  watcher captures what you copy — plain text, formatted text, and images —
+  then you search it, pin favorites, and click to re-copy. Styled text goes
+  back with its formatting (or without it, on request), and pictures come back
+  as pictures. Rows always show plain text, so the list stays scannable.
 - **📶 dcheck** — network dropout monitor (ported from my
   [dcheck](https://github.com/brucelsprouts/dcheck) app). Pings a target on an
   interval and draws a live graph of latency, high-latency spikes, and drops,

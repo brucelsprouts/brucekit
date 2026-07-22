@@ -9,6 +9,13 @@ use tauri_plugin_store::StoreExt;
 pub const STORE_FILE: &str = "config.json";
 pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+`";
 
+/// Floor for a stored panel size, mirroring `minWidth`/`minHeight` in
+/// `tauri.conf.json`. The window manager refuses to go below those, so a
+/// smaller stored number would only ever replay as a size the window never
+/// actually had — clamp on the way in and the two stay honest.
+pub const MIN_LAUNCHER_W: f64 = 460.0;
+pub const MIN_LAUNCHER_H: f64 = 320.0;
+
 /// Last size the user dragged the launcher window to (logical pixels).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -36,7 +43,9 @@ pub struct Config {
     /// Eco mode: every background service paused, module toggles untouched.
     #[serde(default)]
     pub eco_mode: bool,
-    /// Persisted launcher size; None until the user first resizes.
+    /// Persisted size for the *panel* views (a module, or settings); None until
+    /// the user first resizes one. The module grid is excluded on purpose — it
+    /// fits itself to its content, which changes with the pin count.
     #[serde(default)]
     pub launcher_size: Option<WindowSize>,
     pub tools: Map<String, Value>,
@@ -206,7 +215,9 @@ pub fn set_eco_mode<R: Runtime>(app: AppHandle<R>, enabled: bool) -> Result<Conf
     Ok(cfg)
 }
 
-/// Persist the launcher size the user dragged to (logical pixels, debounced JS-side).
+/// Persist the size the user dragged a *panel* to (logical pixels, debounced
+/// JS-side). The module grid does not go through here: it sizes itself to its
+/// own content, so there is nothing about it worth remembering.
 #[tauri::command]
 pub fn set_launcher_size<R: Runtime>(
     app: AppHandle<R>,
@@ -218,8 +229,8 @@ pub fn set_launcher_size<R: Runtime>(
     }
     let mut cfg = load(&app);
     cfg.launcher_size = Some(WindowSize {
-        width: width.clamp(560.0, 4096.0),
-        height: height.clamp(400.0, 4096.0),
+        width: width.clamp(MIN_LAUNCHER_W, 4096.0),
+        height: height.clamp(MIN_LAUNCHER_H, 4096.0),
     });
     save(&app, &cfg)
 }
@@ -278,13 +289,62 @@ pub fn set_autostart<R: Runtime>(app: AppHandle<R>, enabled: bool) -> Result<(),
     use tauri_plugin_autostart::ManagerExt;
     let manager = app.autolaunch();
     if enabled {
-        manager.enable().map_err(|e| e.to_string())?;
+        // A debug build lives at `target/debug` and loads its UI from the Vite
+        // dev server, so registering it means Windows boots a binary that finds
+        // nothing to render at login. Record the preference and let the
+        // installed build claim the OS entry on its next launch.
+        if cfg!(debug_assertions) {
+            eprintln!("[brucekit] autostart: preference saved; a debug build never claims the OS entry");
+        } else {
+            manager.enable().map_err(|e| e.to_string())?;
+        }
     } else {
+        // Clearing is always safe, and from a debug build it is the only way to
+        // drop an entry an earlier dev run left pointing at `target/debug`.
         manager.disable().map_err(|e| e.to_string())?;
     }
     let mut cfg = load(&app);
     cfg.launch_on_startup = enabled;
     save(&app, &cfg)
+}
+
+/// Re-point the OS autostart entry at the executable that is actually running.
+///
+/// The entry stores an absolute path, captured whenever the toggle was last
+/// flipped — so it goes stale the moment the binary behind it moves. Flipping
+/// it during a `tauri dev` session registers `target/debug/brucekit.exe`, which
+/// at login has no Vite server to load from and comes up blank; installing the
+/// app afterwards leaves that dev path in place, silently, forever. Reinstalling
+/// to a different prefix strands it the same way.
+///
+/// So on every launch we simply re-register, unconditionally. That is not
+/// laziness dressed up as idempotence: `is_enabled` cannot be used to detect
+/// this, because on Windows it only asks whether a value under that *name*
+/// exists and never compares the path inside it (auto-launch 0.5, windows.rs).
+/// A stale entry therefore reads as perfectly enabled. `enable` writes the
+/// value outright, so re-running it pins the entry to whichever executable is
+/// running now — which, at startup, is exactly the one we want booted.
+pub fn reconcile_autostart<R: Runtime>(app: &AppHandle<R>) {
+    use tauri_plugin_autostart::ManagerExt;
+    let cfg = load(app);
+    let manager = app.autolaunch();
+    if cfg.launch_on_startup {
+        // A debug build must never claim the entry — see `set_autostart`.
+        if cfg!(debug_assertions) {
+            eprintln!("[brucekit] autostart: OS entry left alone (debug build)");
+        } else if let Err(e) = manager.enable() {
+            eprintln!("[brucekit] autostart re-register failed: {e}");
+        }
+    } else {
+        // Wanted off. `disable` deletes the value and errors when there is
+        // nothing to delete, so only reach for it when one is actually there —
+        // and for that question `is_enabled` is exactly right.
+        if matches!(manager.is_enabled(), Ok(true)) {
+            if let Err(e) = manager.disable() {
+                eprintln!("[brucekit] autostart cleanup failed: {e}");
+            }
+        }
+    }
 }
 
 #[cfg(test)]

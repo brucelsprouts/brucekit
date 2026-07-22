@@ -397,8 +397,12 @@ code {
   gap: var(--bk-gap);
   align-content: start;
 }
+/* Sized to its message, not to the slack around it. The grid view fits the
+   window to its own content, and it measures that content by summing these
+   children — a child that stretches to fill would be measuring the window it
+   is supposed to be deciding. */
 .bk-grid__empty {
-  flex: 1;
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
   padding: 24px 0;
@@ -1405,6 +1409,64 @@ code {
 .bk-clip__text:hover {
   color: var(--bk-accent);
   text-shadow: var(--bk-text-glow);
+}
+
+/* Image rows: the preview is the copy target, with the source dimensions
+   labelling it the way the text of a text row does. The row controls stay
+   centred against the taller preview, as they are on a text row. */
+.bk-clip__preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+/* The one rule that keeps a copied 4K screenshot from taking over the panel:
+   every preview is drawn inside the same box, letterboxed by object-fit, so
+   rows stay a scannable list rather than a gallery. */
+.bk-clip__thumb {
+  flex-shrink: 0;
+  width: 108px;
+  height: 60px;
+  object-fit: contain;
+  object-position: left center;
+  border: 1px solid var(--bk-line);
+  border-radius: 2px;
+  background: var(--bk-bg);
+}
+.bk-clip__thumb--loading {
+  display: block;
+}
+.bk-clip__thumb--missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bk-fg-faint);
+  font-size: var(--bk-fs-sm);
+}
+.bk-clip__preview:hover .bk-clip__thumb {
+  border-color: var(--bk-accent-line);
+}
+.bk-clip__dims {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--bk-fg-dim);
+  font-family: var(--bk-font-mono);
+  font-size: var(--bk-fs-sm);
+}
+.bk-clip__preview:hover .bk-clip__dims {
+  color: var(--bk-accent);
+}
+/* Marks a row that kept its formatting, and drops it on click. */
+.bk-clip__btn--plain {
+  font-weight: 700;
 }
 .bk-clip__time {
   flex-shrink: 0;

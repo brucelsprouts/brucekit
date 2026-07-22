@@ -30,6 +30,8 @@ export type ClipsSettings = {
   maxHistory: number;
   excludedApps: string[];
   honorSensitive: boolean;
+  /** Record copied pictures too. Off keeps the history text-only. */
+  captureImages: boolean;
 };
 
 /**

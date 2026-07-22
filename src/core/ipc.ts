@@ -29,15 +29,35 @@ export type Config = {
   moduleHotkeys: Record<string, string>;
   /** Eco mode: all background services paused, module toggles untouched. */
   ecoMode: boolean;
-  /** Last user-dragged launcher size (logical px); null until first resize. */
+  /** Last user-dragged *panel* size (logical px); null until first resize. */
   launcherSize: { width: number; height: number } | null;
   tools: Record<string, Record<string, unknown>>;
+};
+
+/** Where an image clip's pixels live, relative to the clipstack image dir. */
+export type ClipImage = {
+  width: number;
+  height: number;
+  /** Full-resolution PNG. */
+  file: string;
+  /** Downscaled PNG the panel previews. */
+  thumb: string;
+  /** Fingerprint of the source pixels. */
+  hash: string;
 };
 
 /** One clipboard history entry (clipstack module). */
 export type Clip = {
   id: number;
+  /** Plain text; for an image clip, its label ("Image 800×600"). */
   text: string;
+  /**
+   * Styling captured with the text, restored on copy. Deliberately never
+   * rendered — the panel shows `text` and this only goes back to the clipboard.
+   */
+  html?: string;
+  /** Present on image clips only. */
+  image?: ClipImage;
   pinned: boolean;
   /** Unix millis. */
   createdAt: number;
@@ -90,15 +110,22 @@ type CommandMap = {
   set_module_pinned: { args: { id: string; pinned: boolean }; result: Config };
   /** Eco mode: pause/resume every background service in one flip. */
   set_eco_mode: { args: { enabled: boolean }; result: Config };
-  /** Persist the launcher size the user dragged to (logical px). */
+  /** Persist the size the user dragged a *panel* to (logical px). */
   set_launcher_size: { args: { width: number; height: number }; result: null };
+  /** Resize the launcher window: grid fit-to-content, or a panel's stored size. */
+  resize_launcher: { args: { width: number; height: number }; result: null };
   /** Pin the launcher against click-away dismissal (watchable panels). */
   set_keep_open: { args: { enabled: boolean }; result: null };
 
   /** clipstack: list clips (pinned first, newest first), optionally filtered. */
   clips_list: { args: { search: string | null }; result: Clip[] };
-  /** clipstack: write a clip's text back to the OS clipboard. */
-  clips_copy: { args: { id: number }; result: null };
+  /**
+   * clipstack: put a clip back on the OS clipboard in the flavor it was
+   * captured in. `plain` strips the styling off a formatted clip.
+   */
+  clips_copy: { args: { id: number; plain?: boolean }; result: null };
+  /** clipstack: an image clip's PNG bytes — thumbnail unless `thumb` is false. */
+  clips_image: { args: { id: number; thumb?: boolean }; result: ArrayBuffer };
   clips_toggle_pin: { args: { id: number }; result: null };
   clips_delete: { args: { id: number }; result: null };
   clips_clear: { args: void; result: null };

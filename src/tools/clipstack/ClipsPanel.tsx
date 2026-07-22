@@ -4,6 +4,7 @@ import type { ToolContext } from "../types";
 import { errorMessage, type Clip } from "../../core/ipc";
 import { useUndoSlot } from "../../core/undo";
 import { EV_CLIP_ADDED } from "../../core/events";
+import { ClipThumb } from "./ClipThumb";
 import { formatRelative } from "./time";
 import {
   clampMaxHistory,
@@ -19,6 +20,13 @@ import {
  * ClipStack panel: search the clipboard history, click a row to copy it back,
  * pin favorites to the top, delete one or clear everything. The list refreshes
  * live while open via the clip-added event from the Rust monitor.
+ *
+ * Rows come in the three flavors the monitor captures. Images show a bounded
+ * thumbnail. Formatted text shows its *plain* text — never the markup: the
+ * point of the list is to scan what you copied, and a row that renders as a
+ * heading, a link, or a table would break the column and misrepresent what
+ * lands on the clipboard. The styling is still there, and the `T` button next
+ * to such a row is the way to deliberately drop it.
  *
  * The settings drawer writes to `tools.clipstack`, which the Rust monitor
  * re-reads every poll — so changes take effect on the next copy, no restart.
@@ -44,6 +52,7 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
   const [unlimited, setUnlimited] = useState(false);
   const [excludedDraft, setExcludedDraft] = useState(formatExcludedApps(DEFAULT_EXCLUDED_APPS));
   const [honorSensitive, setHonorSensitive] = useState(true);
+  const [captureImages, setCaptureImages] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
@@ -65,8 +74,9 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
       ctx.settings.get<number>("maxHistory", DEFAULT_MAX_HISTORY),
       ctx.settings.get<string[]>("excludedApps", DEFAULT_EXCLUDED_APPS),
       ctx.settings.get<boolean>("honorSensitive", true),
+      ctx.settings.get<boolean>("captureImages", true),
     ])
-      .then(([max, apps, honor]) => {
+      .then(([max, apps, honor, images]) => {
         if (!alive) return;
         setUnlimited(max === 0);
         // Keep the last real number in the box so unticking Unlimited restores
@@ -74,6 +84,7 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
         if (max !== 0) setMaxDraft(String(max));
         setExcludedDraft(formatExcludedApps(apps));
         setHonorSensitive(honor);
+        setCaptureImages(images);
       })
       .catch(() => {});
     return () => {
@@ -92,10 +103,18 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
     return () => dispose();
   }, [refresh]);
 
-  async function copy(clip: Clip) {
+  /**
+   * Put a clip back. `plain` is the escape hatch for a formatted clip you want
+   * to paste somewhere the styling would look wrong — the same choice Windows
+   * offers as "paste as text".
+   */
+  async function copy(clip: Clip, plain = false) {
     try {
-      await ctx.invoke("clips_copy", { id: clip.id });
-      ctx.toast("Copied to clipboard", { kind: "success" });
+      await ctx.invoke("clips_copy", { id: clip.id, plain });
+      ctx.toast(
+        clip.image ? "Image copied" : plain ? "Copied without formatting" : "Copied to clipboard",
+        { kind: "success" },
+      );
     } catch (err) {
       ctx.toast(errorMessage(err), { kind: "error" });
     }
@@ -171,6 +190,7 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
       await ctx.settings.set("maxHistory", maxHistory);
       await ctx.settings.set("excludedApps", excludedApps);
       await ctx.settings.set("honorSensitive", honorSensitive);
+      await ctx.settings.set("captureImages", captureImages);
       // Apply the new cap to what's already stored, then show the result.
       const kept = await ctx.invoke("clips_apply_limit");
       await refresh();
@@ -200,14 +220,30 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
     const pending = confirming?.id === clip.id ? confirming.kind : null;
     return (
       <li key={clip.id} className={`bk-clip ${clip.pinned ? "bk-clip--pinned" : ""}`}>
-        <button
-          type="button"
-          className="bk-clip__text"
-          onClick={() => void copy(clip)}
-          title="Copy to clipboard"
-        >
-          {clip.text}
-        </button>
+        {clip.image ? (
+          <button
+            type="button"
+            className="bk-clip__preview"
+            onClick={() => void copy(clip)}
+            // The preview is decorative (see ClipThumb) — the size beside it is
+            // the only thing a text row's label would have carried, so the
+            // whole row names itself here instead.
+            aria-label={`Copy image ${clip.image.width}×${clip.image.height} to clipboard`}
+            title="Copy image to clipboard"
+          >
+            <ClipThumb ctx={ctx} clip={clip} />
+            <span className="bk-clip__dims">{`${clip.image.width}×${clip.image.height}`}</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="bk-clip__text"
+            onClick={() => void copy(clip)}
+            title={clip.html ? "Copy with formatting" : "Copy to clipboard"}
+          >
+            {clip.text}
+          </button>
+        )}
         {pending ? (
           <>
             <span className={`bk-clip__confirm ${pending === "unpin" ? "is-warn" : ""}`}>
@@ -235,6 +271,17 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
         ) : (
           <>
             <span className="bk-clip__time">{formatRelative(clip.createdAt)}</span>
+            {clip.html && (
+              <button
+                type="button"
+                className="bk-clip__btn bk-clip__btn--plain"
+                onClick={() => void copy(clip, true)}
+                aria-label="Copy without formatting"
+                title="This clip kept its formatting — copy it as plain text instead"
+              >
+                T
+              </button>
+            )}
             <button
               type="button"
               className={`bk-clip__btn ${clip.pinned ? "is-active" : ""}`}
@@ -279,7 +326,7 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
           <span className="bk-label">
             {query.trim() ? "NO MATCHES" : "NOTHING COPIED YET"}
           </span>
-          <em>Copied text shows up here while the module is on.</em>
+          <em>Copied text and images show up here while the module is on.</em>
         </div>
       ) : (
         <div className="bk-clips__scroll">
@@ -382,6 +429,16 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
               aria-label="Skip clips marked sensitive"
             />
             <span>Skip copies apps mark as sensitive</span>
+          </label>
+
+          <label className="bk-toggle" title="Copied pictures are saved as PNGs beside clips.json">
+            <input
+              type="checkbox"
+              checked={captureImages}
+              onChange={(e) => setCaptureImages(e.target.checked)}
+              aria-label="Record copied images"
+            />
+            <span>Record copied images</span>
           </label>
 
           <label className="bk-dcheck__field">
