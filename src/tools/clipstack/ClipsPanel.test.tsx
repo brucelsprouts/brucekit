@@ -15,7 +15,9 @@ const invoke = vi.fn();
 function makeCtx(clips: Clip[]): ToolContext {
   invoke.mockImplementation((cmd: string) => {
     if (cmd === "clips_list") return Promise.resolve(clips);
-    if (cmd === "clips_image") return Promise.resolve(new ArrayBuffer(8));
+    // number[], the shape that broke previews in the real app — a test using
+    // an ArrayBuffer here would have passed while the app stayed broken.
+    if (cmd === "clips_image") return Promise.resolve([0x89, 0x50, 0x4e, 0x47]);
     return Promise.resolve(null);
   });
   return {
@@ -58,9 +60,16 @@ async function show(clips: Clip[]) {
 
 const click = (el: HTMLElement) => act(() => void fireEvent.click(el));
 
+/** Blobs handed to createObjectURL, so a test can check what got wrapped. */
+let blobs: Blob[] = [];
+
 beforeEach(() => {
   // jsdom ships neither, and the thumbnail loader needs both.
-  URL.createObjectURL = vi.fn(() => "blob:clip");
+  blobs = [];
+  URL.createObjectURL = vi.fn((blob: Blob) => {
+    blobs.push(blob);
+    return "blob:clip";
+  });
   URL.revokeObjectURL = vi.fn();
 });
 
@@ -78,6 +87,12 @@ describe("ClipsPanel image clips", () => {
     // which is only ever loaded to put back on the clipboard.
     expect(invoke).toHaveBeenCalledWith("clips_image", { id: 2 });
     expect(screen.getByText("1920×1080")).toBeInTheDocument();
+
+    // The blob must hold the 4 PNG bytes, not the 12 characters of
+    // "137,80,78,71" — the silent stringification that broke the real preview.
+    expect(blobs).toHaveLength(1);
+    expect(blobs[0].size).toBe(4);
+    expect(blobs[0].type).toBe("image/png");
   });
 
   it("copies the picture, not its label, when the row is clicked", async () => {
@@ -86,6 +101,24 @@ describe("ClipsPanel image clips", () => {
     await click(screen.getByRole("button", { name: /copy image/i }));
 
     expect(invoke).toHaveBeenCalledWith("clips_copy", { id: 2, plain: false });
+  });
+
+  it("falls back to a placeholder when the preview will not render", async () => {
+    // The bytes can arrive and the render still fail — a CSP without `blob:`
+    // does precisely that. Showing the webview's broken-image glyph would read
+    // as a corrupt clip rather than a display problem.
+    await show([imageClip()]);
+    const row = await screen.findByRole("button", { name: /copy image/i });
+    const img = await waitFor(() => {
+      const found = row.querySelector("img");
+      expect(found).not.toBeNull();
+      return found!;
+    });
+
+    await act(async () => void fireEvent.error(img));
+
+    expect(row.querySelector("img")).toBeNull();
+    expect(screen.getByText("?")).toBeInTheDocument();
   });
 
   it("survives an image whose file has gone missing", async () => {

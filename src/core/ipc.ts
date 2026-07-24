@@ -124,8 +124,11 @@ type CommandMap = {
    * captured in. `plain` strips the styling off a formatted clip.
    */
   clips_copy: { args: { id: number; plain?: boolean }; result: null };
-  /** clipstack: an image clip's PNG bytes — thumbnail unless `thumb` is false. */
-  clips_image: { args: { id: number; thumb?: boolean }; result: ArrayBuffer };
+  /**
+   * clipstack: an image clip's PNG bytes — thumbnail unless `thumb` is false.
+   * Run the result through `toBytes` before treating it as binary.
+   */
+  clips_image: { args: { id: number; thumb?: boolean }; result: RawBytes };
   clips_toggle_pin: { args: { id: number }; result: null };
   clips_delete: { args: { id: number }; result: null };
   clips_clear: { args: void; result: null };
@@ -156,6 +159,28 @@ export type TauriInvoke = <K extends keyof CommandMap>(
 /** Typed wrapper over Tauri's `invoke`. */
 export const invoke: TauriInvoke = ((cmd: string, args?: unknown) =>
   tauriInvoke(cmd, args as Record<string, unknown> | undefined)) as TauriInvoke;
+
+/** What a command returning raw bytes can arrive as on the JS side. */
+export type RawBytes = ArrayBuffer | ArrayBufferView | number[];
+
+/**
+ * Normalize a raw-byte command result to a `Uint8Array`.
+ *
+ * Tauri delivers a `tauri::ipc::Response` as an `ArrayBuffer` over the custom
+ * protocol, but as a plain `number[]` when the payload falls back to JSON. Most
+ * consumers never notice, because `new Uint8ClampedArray(x)` accepts both —
+ * but `new Blob([x])` does *not* fail on an array, it stringifies it into a
+ * text blob, and the resulting object URL renders as a broken image. Normalize
+ * before doing anything that treats the value as binary.
+ */
+export function toBytes(payload: RawBytes): Uint8Array<ArrayBuffer> {
+  if (payload instanceof ArrayBuffer) return new Uint8Array(payload);
+  if (ArrayBuffer.isView(payload)) {
+    // The cast narrows away SharedArrayBuffer, which no IPC payload can be.
+    return new Uint8Array(payload.buffer as ArrayBuffer, payload.byteOffset, payload.byteLength);
+  }
+  return new Uint8Array(payload);
+}
 
 /** Normalize an unknown thrown value (string, Error, or serialized enum) to text. */
 export function errorMessage(err: unknown): string {
