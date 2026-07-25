@@ -5,12 +5,14 @@ pub mod config;
 pub mod dcheck;
 pub mod ocr;
 pub mod runtime;
+pub mod xpwaste;
 
 use tauri::{AppHandle, Runtime};
 
 /// Module ids that own a background service (the rest are UI-only, so
 /// toggling them merely hides the tile).
-const SERVICE_MODULES: [&str; 3] = [clips::MODULE_ID, dcheck::MODULE_ID, runtime::MODULE_ID];
+const SERVICE_MODULES: [&str; 4] =
+    [clips::MODULE_ID, dcheck::MODULE_ID, runtime::MODULE_ID, xpwaste::MODULE_ID];
 
 /// Start/stop the background service behind a module id (no-op for UI-only tools).
 pub fn apply_module_service<R: Runtime>(app: &AppHandle<R>, id: &str, enabled: bool) {
@@ -18,6 +20,7 @@ pub fn apply_module_service<R: Runtime>(app: &AppHandle<R>, id: &str, enabled: b
         clips::MODULE_ID => clips::set_running(app, enabled),
         dcheck::MODULE_ID => dcheck::set_running(app, enabled),
         runtime::MODULE_ID => runtime::set_running(app, enabled),
+        xpwaste::MODULE_ID => xpwaste::set_running(app, enabled),
         _ => {}
     }
 }

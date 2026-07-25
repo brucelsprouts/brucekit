@@ -18,6 +18,9 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-store = "2"
 tauri-plugin-clipboard-manager = "2"
+# xpwaste — the "pick an alert sound" file dialog. Playback itself needs no
+# audio crate: MCI hands the file to the codecs Windows already ships.
+tauri-plugin-dialog = "2"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -37,11 +40,15 @@ features = [
   "Globalization",
   "Graphics_Imaging",
   "Media_Ocr",
+  # xpwaste — mciSendStringW plays the alert sound through Windows' own codecs.
+  "Win32_Media_Multimedia",
   "Storage_Streams",
   "Win32_Foundation",
   # clipstack — reads the "don't record this" clipboard markers password
   # managers set, so secrets never reach the history.
   "Win32_System_DataExchange",
+  # xpwaste — MessageBeep, the Windows notification chime, lives here.
+  "Win32_System_Diagnostics_Debug",
   "Win32_System_Memory",
   "Win32_System_Power",
   "Win32_System_Threading",

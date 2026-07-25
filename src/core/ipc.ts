@@ -84,6 +84,37 @@ export type AppUsage = {
   last: UsageSession | null;
 };
 
+/** Which kind of session the xpwaste timer is on. */
+export type Phase = "focus" | "shortBreak" | "longBreak";
+
+/**
+ * The xpwaste timer, exactly as the panel renders it. The clock lives in Rust
+ * so a session survives the launcher being hidden, which means the webview
+ * holds no countdown of its own that could drift out of step with it.
+ */
+export type TimerSnapshot = {
+  phase: Phase;
+  remainingSec: number;
+  totalSec: number;
+  running: boolean;
+  /** Focus sessions banked toward the current cycle. */
+  cyclesCompleted: number;
+  cycleLength: number;
+  /** Active seconds in the focus session on screen (paused time excluded). */
+  activeSec: number;
+  /** False when the module is off or eco mode is on — the clock is stopped. */
+  ticking: boolean;
+};
+
+/** One logged stretch of focus (xpwaste module). Active time only. */
+export type FocusEntry = {
+  id: number;
+  /** Unix millis. */
+  startTs: number;
+  endTs: number;
+  seconds: number;
+};
+
 type CommandMap = {
   /** Freeze the monitor under the cursor into Rust memory and show the overlay. */
   capture_monitor: { args: { mode: CaptureMode }; result: CaptureDims };
@@ -147,6 +178,31 @@ type CommandMap = {
   runtime_uptime: { args: void; result: number };
   /** runtime: per-app screen time — current session + the previous run's. */
   runtime_apps: { args: void; result: AppUsage };
+
+  /** xpwaste: the timer as it stands. Every control below returns it too. */
+  xpwaste_state: { args: void; result: TimerSnapshot };
+  /** Start or resume. A no-op while the service is stopped (module off / eco). */
+  xpwaste_start: { args: void; result: TimerSnapshot };
+  /** Pause, banking the focus time earned so far. */
+  xpwaste_pause: { args: void; result: TimerSnapshot };
+  /** End this session early and move to the next one. */
+  xpwaste_skip: { args: void; result: TimerSnapshot };
+  /** Back to the start of this phase, cycle count cleared. */
+  xpwaste_reset: { args: void; result: TimerSnapshot };
+  /** Jump straight to a phase (the three session buttons). */
+  xpwaste_set_phase: { args: { phase: Phase }; result: TimerSnapshot };
+  /** Nudge the cycle counter by hand (the − / + controls). */
+  xpwaste_bump_cycle: { args: { delta: number }; result: TimerSnapshot };
+  /** Adopt freshly saved durations, resizing the current session to match. */
+  xpwaste_apply_settings: { args: void; result: TimerSnapshot };
+  /** xpwaste: the focus log, oldest first. */
+  xpwaste_history: { args: void; result: FocusEntry[] };
+  xpwaste_delete_entry: { args: { id: number }; result: null };
+  xpwaste_clear_history: { args: void; result: null };
+  /** Open a file picker for the alert sound; null when dismissed. */
+  xpwaste_pick_sound: { args: void; result: string | null };
+  /** Play the configured alert once. */
+  xpwaste_test_sound: { args: void; result: null };
 };
 
 type Args<K extends keyof CommandMap> = CommandMap[K]["args"];

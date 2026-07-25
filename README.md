@@ -39,6 +39,12 @@ shows up.
   [dcheck](https://github.com/brucelsprouts/dcheck) app). Pings a target on an
   interval and draws a live graph of latency, high-latency spikes, and drops,
   with uptime stats and a persistent log.
+- **🍅 xpwaste** — pomodoro focus timer (ported from my
+  [xpwaste](https://github.com/brucelsprouts/xpwaste) app). Focus and break
+  sessions with a cycle that earns you a long break, a countdown ring, and a log
+  of the focus time you *actually* did — paused minutes don't count. The clock
+  runs in the background, so a session keeps time with the launcher closed and
+  still beeps (or plays a sound of your choosing) when it turns over.
 - **🔌 Module toggles** — every module can be switched off in Settings. Off means
   gone: hidden from the grid *and* its background work (clipboard watcher,
   pinger) fully stopped — so a leaner brucekit is one checkbox away.

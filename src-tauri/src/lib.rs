@@ -7,6 +7,7 @@ use commands::capture::AppState;
 use commands::clips::ClipsState;
 use commands::dcheck::DcheckState;
 use commands::runtime::RuntimeState;
+use commands::xpwaste::XpwasteState;
 
 /// Hotkey/tray → launcher: freshly opened, reset to the tool grid.
 pub const EV_RESET: &str = "brucekit://reset";
@@ -27,10 +28,12 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .manage(ClipsState::default())
         .manage(DcheckState::default())
         .manage(RuntimeState::default())
+        .manage(XpwasteState::default())
         .manage(window::KeepOpen::default())
         // Click-away dismiss lives here (not JS) so a blur can be forgiven
         // when the cursor shows it's really a resize or header-drag grab —
@@ -103,6 +106,19 @@ pub fn run() {
             commands::dcheck::dcheck_clear,
             commands::runtime::runtime_uptime,
             commands::runtime::runtime_apps,
+            commands::xpwaste::xpwaste_state,
+            commands::xpwaste::xpwaste_start,
+            commands::xpwaste::xpwaste_pause,
+            commands::xpwaste::xpwaste_skip,
+            commands::xpwaste::xpwaste_reset,
+            commands::xpwaste::xpwaste_set_phase,
+            commands::xpwaste::xpwaste_bump_cycle,
+            commands::xpwaste::xpwaste_apply_settings,
+            commands::xpwaste::xpwaste_history,
+            commands::xpwaste::xpwaste_delete_entry,
+            commands::xpwaste::xpwaste_clear_history,
+            commands::xpwaste::xpwaste_pick_sound,
+            commands::xpwaste::xpwaste_test_sound,
         ])
         .run(tauri::generate_context!())
         .expect("error while running brucekit");

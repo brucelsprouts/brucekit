@@ -25,5 +25,8 @@ export const EV_CLIP_ADDED = "brucekit://clip-added";
 /** Rust → launcher: a dcheck ping completed (payload: PingEntry). */
 export const EV_PING = "brucekit://ping";
 
+/** Rust → launcher: the xpwaste timer changed (payload: TimerSnapshot). */
+export const EV_XPWASTE = "brucekit://xpwaste";
+
 /** Per-module hotkey → launcher: open straight into one tool (payload: id). */
 export const EV_OPEN_TOOL = "brucekit://open-tool";

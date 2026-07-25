@@ -19,6 +19,21 @@ use crate::commands::config::Config;
 /// Menu-id prefix for a pinned module's entry: `pin:<module-id>`.
 const PIN_PREFIX: &str = "pin:";
 
+/// The one tray icon's id. Modules reach for it by name when they have
+/// something to say while the launcher is hidden (xpwaste's session alerts).
+pub const TRAY_ID: &str = "main";
+
+/// Default tray tooltip — what a module's transient message reverts to.
+pub const TRAY_TOOLTIP: &str = "brucekit";
+
+/// Replace the tray tooltip, or restore the default with `None`. A missing
+/// tray is not an error; it just means there is nowhere to say this yet.
+pub fn set_tooltip<R: Runtime>(app: &AppHandle<R>, text: Option<&str>) {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(text.unwrap_or(TRAY_TOOLTIP)));
+    }
+}
+
 /// The pinned modules worth showing: pinned, still installed-and-enabled, in
 /// pin order (pure; unit-tested). A pinned module the user later toggled off
 /// would open to nothing, so it drops out of the tray until it's back on.
@@ -73,7 +88,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, cfg: &Config) -> Result<Menu<R>, B
 /// A missing tray is not an error: on startup `build` runs after config load,
 /// and nothing else can observe a tray that doesn't exist yet.
 pub fn refresh<R: Runtime>(app: &AppHandle<R>, cfg: &Config) -> Result<(), Box<dyn Error>> {
-    let Some(tray) = app.tray_by_id("main") else {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return Ok(());
     };
     tray.set_menu(Some(build_menu(app, cfg)?))?;
@@ -89,9 +104,9 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
         .cloned()
         .ok_or("missing default window icon")?;
 
-    TrayIconBuilder::with_id("main")
+    TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
-        .tooltip("brucekit")
+        .tooltip(TRAY_TOOLTIP)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {

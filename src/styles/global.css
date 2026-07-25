@@ -1709,6 +1709,299 @@ code {
 }
 
 
+/* ------------------------------------------------------ xpwaste panel */
+.bk-xpw {
+  display: flex;
+  flex-direction: column;
+  /* Tighter than the other panels on purpose: this one is a hierarchy, not a
+     list of equals. The clock earns the room the gaps used to spend. */
+  gap: 10px;
+  min-height: 100%;
+}
+/* The clock and its controls, as one block. It takes the slack and centres in
+   it, so a tall window spends its extra height on the thing you opened the
+   module for instead of pushing a void into the middle of the panel. */
+.bk-xpw__hero {
+  /* The clock and the log share the window's spare height rather than one of
+     them hogging it and stranding the other — but the split is lopsided on
+     purpose. A taller window is a request for a bigger clock; the log only
+     needs enough room to stop looking cut off. */
+  flex: 5 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.bk-xpw__phases {
+  align-self: center;
+}
+
+/* The clock: ring and face share one grid cell, so the countdown sits dead
+   centre of the arc without either one being positioned against the other.
+   Both scale with the window — drag the panel taller and the countdown is what
+   grows, because it's the thing you're reading from across the room. */
+.bk-xpw__clock {
+  /* The dial takes the height the hero has left and stays square, rather than
+     being pinned to a number the window knows nothing about. Everything inside
+     is then measured against the dial itself (cq units below), so the readout
+     keeps the same air around it whatever size the box ends up. */
+  flex: 1 1 auto;
+  min-height: 128px;
+  /* Past this it stops being a clock and starts being a wall. The slack goes
+     to the log instead. */
+  max-height: 460px;
+  aspect-ratio: 1;
+  container-type: size;
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  margin: 2px 0;
+}
+.bk-xpw__ring {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  /* Twelve o'clock start, draining clockwise — a clock face, not a chart. */
+  transform: rotate(-90deg);
+}
+.bk-xpw__ringtrack {
+  fill: none;
+  stroke: var(--bk-line);
+  stroke-width: 3;
+}
+.bk-xpw__ringarc {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--bk-med) linear, stroke var(--bk-med) ease;
+}
+/* Focus carries the accent; a break is the same clock doing something you
+   don't need to watch, so it steps down to the dim foreground rather than
+   reaching for a second colour. */
+.bk-xpw__ringarc.is-focus {
+  stroke: var(--bk-accent);
+}
+.bk-xpw__ringarc.is-break {
+  stroke: var(--bk-fg-faint);
+}
+.bk-xpw__ringarc.is-running.is-focus {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.35));
+}
+.bk-xpw__face {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  /* Keeps the face clear of the arc it sits inside — the ring's inner edge is
+     about 80% of the dial, and a readout that runs up to it reads as a number
+     jammed in a circle rather than one framed by it. */
+  max-width: 68cqw;
+}
+.bk-xpw__time {
+  font-weight: 600;
+  /* Measured against the dial, not the viewport: five monospace figures run
+     about 3em wide, so this lands the readout at ~62% of the dial and leaves
+     the rest as air on both sides at every size. */
+  font-size: 20.5cqh;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  color: var(--bk-fg);
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--bk-text-glow);
+}
+/* Past 100 minutes the readout grows a sixth figure, which would run into the
+   arc on a small dial. Step the type down so the frame holds instead. */
+.bk-xpw__time.is-long {
+  font-size: 16.8cqh;
+}
+
+/* cycle row: the pips are the count, the label spells it out */
+.bk-xpw__cycle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.bk-xpw__pips {
+  display: flex;
+  gap: 5px;
+}
+.bk-xpw__pip {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--bk-line-bright);
+  border-radius: 1px;
+}
+.bk-xpw__pip.is-done {
+  background: var(--bk-accent);
+  border-color: var(--bk-accent-line);
+  box-shadow: var(--bk-glow);
+}
+/* One row of four equals. Start is still the accented one — it just stops
+   being a different shape as well, which read as four unrelated controls. */
+.bk-xpw__controls {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+.bk-xpw__controls > .bk-btn,
+.bk-xpw__controls > .bk-action {
+  flex: 1 1 0;
+  max-width: 116px;
+  padding: 9px 10px;
+  font-size: var(--bk-fs-sm);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Today's numbers are context, not the headline — same cards dcheck uses, sized
+   down so they read as a footnote to the clock rather than a second subject. */
+.bk-xpw__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.bk-xpw__stats .bk-dstat {
+  gap: 3px;
+  padding: 7px 10px;
+}
+.bk-xpw__stats .bk-dstat__val {
+  font-size: var(--bk-fs-base);
+}
+
+/* focus log — takes whatever height is left, so a tall window feeds the list
+   instead of stranding a block of nothing under it. */
+.bk-xpw__logwrap {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* An empty log claims no room at all — the clock above takes it instead. */
+.bk-xpw__logwrap.is-empty {
+  flex: 0 0 auto;
+}
+.bk-xpw__logscroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.bk-xpw__loghead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bk-xpw__loghead .bk-btn:last-child {
+  margin-left: auto;
+}
+.bk-xpw__log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bk-xpw__logrow {
+  display: grid;
+  grid-template-columns: minmax(70px, 92px) 1fr 72px 20px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--bk-line);
+}
+.bk-xpw__logrow:last-child {
+  border-bottom: 0;
+}
+.bk-xpw__logday {
+  font-size: var(--bk-fs-label);
+  color: var(--bk-fg-faint);
+  white-space: nowrap;
+}
+.bk-xpw__logspan {
+  font-size: var(--bk-fs-sm);
+  color: var(--bk-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.bk-xpw__logtime {
+  text-align: right;
+  font-size: var(--bk-fs-sm);
+  color: var(--bk-fg);
+  white-space: nowrap;
+}
+/* One row's delete: invisible until the row is approached, like the clip
+   list's controls — a log you scan shouldn't be a wall of × glyphs. */
+.bk-xpw__logdel {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--bk-fg-faint);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity var(--bk-fast) ease, color var(--bk-fast) ease;
+}
+.bk-xpw__logrow:hover .bk-xpw__logdel,
+.bk-xpw__logdel:focus-visible {
+  opacity: 1;
+}
+.bk-xpw__logdel:hover {
+  color: var(--bk-danger);
+}
+/* Sized to its message. It's a footnote under the log header, not a panel of
+   its own — the height it used to claim now belongs to the clock. */
+.bk-xpw__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 2px;
+  align-items: center;
+  text-align: center;
+}
+.bk-xpw__empty em {
+  font-style: normal;
+  font-size: var(--bk-fs-sm);
+  color: var(--bk-fg-faint);
+}
+
+/* settings drawer */
+.bk-xpw__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bk-line);
+}
+.bk-xpw__form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bk-xpw__field {
+  flex: 0 0 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bk-xpw__note {
+  margin: 0;
+  font-size: var(--bk-fs-label);
+  line-height: 1.5;
+  color: var(--bk-fg-dim);
+}
+
 /* -------------------------------------------------- settings: modules */
 .bk-toollist__item--off .bk-toollist__icon,
 .bk-toollist__item--off .bk-toollist__text {
@@ -1737,4 +2030,257 @@ code {
 .bk-pinbtn.is-active {
   color: var(--bk-accent);
   text-shadow: var(--bk-text-glow);
+}
+
+/* ------------------------------------------------------- glyphs panel */
+/* Special characters. The whole panel is one column: find, filter, grid,
+   readout. The grid is the only thing that scrolls, so the search field and
+   the readout stay put while you steer — the readout in particular is useless
+   if it can scroll out from under the selection it describes. */
+.bk-glyphs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.bk-glyphs__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 36px;
+  flex-shrink: 0;
+  background: var(--bk-bg-elev);
+  border: 1px solid var(--bk-line-bright);
+  border-radius: var(--bk-radius);
+}
+/* Focus lives here permanently, so the field is drawn lit rather than
+   changing on focus — a ring that never turns off is just noise. */
+.bk-glyphs__input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--bk-fg);
+  font-family: var(--bk-font-mono);
+  font-size: var(--bk-fs-base);
+  letter-spacing: 0.02em;
+  user-select: text;
+  min-width: 0;
+}
+.bk-glyphs__input::placeholder {
+  color: var(--bk-fg-faint);
+}
+.bk-glyphs__count {
+  font-size: var(--bk-fs-label);
+  letter-spacing: var(--bk-tracking);
+  color: var(--bk-fg-faint);
+  white-space: nowrap;
+}
+
+/* Category chips: one scrolling rail rather than a wrapping block, so the
+   grid below never jumps down a row when the RECENT chip appears. */
+.bk-glyphs__chips {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.bk-glyphs__chip {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  background: transparent;
+  border: 1px solid var(--bk-line);
+  border-radius: var(--bk-radius);
+  color: var(--bk-fg-faint);
+  font-family: var(--bk-font-mono);
+  font-size: var(--bk-fs-label);
+  letter-spacing: var(--bk-tracking);
+  white-space: nowrap;
+  transition: color var(--bk-fast) ease, border-color var(--bk-fast) ease;
+}
+.bk-glyphs__chip:hover {
+  color: var(--bk-fg);
+  border-color: var(--bk-fg-faint);
+}
+.bk-glyphs__chip[data-active="true"] {
+  color: var(--bk-accent);
+  border-color: var(--bk-accent-line);
+  background: var(--bk-accent-soft);
+  text-shadow: var(--bk-text-glow);
+}
+
+/* auto-fill, not auto-fit: cells keep their size at any panel width instead of
+   stretching into wide rectangles when a search narrows to three results. */
+.bk-glyphs__grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 4px;
+  align-content: start;
+  padding-right: 2px;
+}
+/* The cell is a frame; the copy target and the pin star are siblings inside
+   it, so a click near the corner can only ever mean pin. */
+.bk-glyphs__cell {
+  position: relative;
+  aspect-ratio: 1;
+}
+.bk-glyphs__hit {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--bk-tile-bg);
+  border: 1px solid transparent;
+  border-radius: var(--bk-radius);
+  color: var(--bk-fg-dim);
+  transition: background var(--bk-fast) ease, color var(--bk-fast) ease,
+    border-color var(--bk-fast) ease;
+}
+.bk-glyphs__cell[data-selected="true"] .bk-glyphs__hit {
+  background: var(--bk-tile-bg-hover);
+  border-color: var(--bk-accent-line);
+  color: var(--bk-accent);
+  box-shadow: var(--bk-glow);
+}
+/* A pinned cell reads as pinned from the grid, not only from the rail. */
+.bk-glyphs__cell[data-pinned="true"] .bk-glyphs__hit {
+  border-color: var(--bk-line-bright);
+}
+
+/* Hidden until the cell is approached — 500 cells wearing 500 stars would be
+   louder than the characters they belong to. A lit star is always visible. */
+.bk-glyphs__pin {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--bk-bg);
+  border: 0;
+  border-radius: var(--bk-radius);
+  color: var(--bk-fg-faint);
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity var(--bk-fast) ease, color var(--bk-fast) ease;
+}
+.bk-glyphs__cell:hover .bk-glyphs__pin,
+.bk-glyphs__cell[data-selected="true"] .bk-glyphs__pin,
+.bk-glyphs__pin.is-active {
+  opacity: 1;
+}
+.bk-glyphs__pin:hover {
+  color: var(--bk-fg);
+}
+.bk-glyphs__pin.is-active {
+  color: var(--bk-accent);
+  text-shadow: var(--bk-text-glow);
+}
+
+/* Pinned rail: above the search field, and unaffected by it. These are the
+   characters you keep, so they stay put through every query and category. */
+.bk-glyphs__pins {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--bk-line);
+}
+.bk-glyphs__pins-mark {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--bk-accent);
+  text-shadow: var(--bk-text-glow);
+}
+/* One row that scrolls sideways rather than a block that wraps: the rail must
+   never push the grid down a row just because a pin was added. */
+.bk-glyphs__pins-rail {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 3px 3px 0 0;
+}
+.bk-glyphs__pins-rail .bk-glyphs__cell {
+  flex: 0 0 auto;
+  width: 34px;
+}
+.bk-glyphs__pins-rail .bk-glyphs__char {
+  font-size: 17px;
+}
+/* The character is the content, so it gets the size the rest of the HUD
+   doesn't — this is the one place type is meant to be looked at, not read. */
+.bk-glyphs__char {
+  font-size: 19px;
+  line-height: 1;
+}
+.bk-glyphs__cell[data-selected="true"] .bk-glyphs__char {
+  text-shadow: var(--bk-text-glow);
+}
+/* Nothing in the rail is "selected", so it lights on approach instead. */
+.bk-glyphs__pins-rail .bk-glyphs__cell:hover .bk-glyphs__hit {
+  background: var(--bk-tile-bg-hover);
+  color: var(--bk-accent);
+}
+/* Invisible characters get their abbreviation in a dashed box: an empty cell
+   would be indistinguishable from a rendering failure. */
+.bk-glyphs__stand-in {
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: var(--bk-fg-faint);
+  border: 1px dashed var(--bk-line-bright);
+  border-radius: var(--bk-radius);
+  padding: 2px 3px;
+}
+.bk-glyphs__empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+
+/* Readout for whatever the highlight is on. Fixed height so the grid above it
+   doesn't resize by a line every time a name wraps or the selection clears. */
+.bk-glyphs__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  height: 22px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bk-line);
+}
+.bk-glyphs__status-char {
+  flex-shrink: 0;
+  min-width: 16px;
+  text-align: center;
+  font-size: var(--bk-fs-lg);
+  line-height: 1;
+  color: var(--bk-accent);
+  text-shadow: var(--bk-text-glow);
+}
+.bk-glyphs__status-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--bk-fs-label);
+  letter-spacing: 0.04em;
+  color: var(--bk-fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-glyphs__hint {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
 }
