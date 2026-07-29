@@ -14,6 +14,8 @@ const clipstack: ToolModule = {
   keywords: ["clipboard", "history", "copy", "paste", "clips", "stack", "pin"],
   icon: ClipsIcon,
   kind: "panel",
+  // Tall: the clip list is the point, and image thumbs want the width.
+  panelSize: { width: 720, height: 560 },
   render(ctx) {
     return <ClipsPanel ctx={ctx} />;
   },

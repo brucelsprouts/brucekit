@@ -15,6 +15,8 @@ const ocrGrab: ToolModule = {
   keywords: ["ocr", "text", "recognize", "screenshot", "scan", "copy"],
   icon: OcrIcon,
   kind: "panel",
+  // Room to read back a paragraph of recognized text without scrolling.
+  panelSize: { width: 640, height: 520 },
   render(ctx) {
     return <OcrPanel ctx={ctx} />;
   },

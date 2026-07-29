@@ -18,6 +18,9 @@ export type CaptureMeta = CaptureDims & {
   seq: number;
 };
 
+/** A launcher window size in logical pixels. */
+export type WindowSize = { width: number; height: number };
+
 export type Config = {
   hotkey: string;
   launchOnStartup: boolean;
@@ -29,8 +32,13 @@ export type Config = {
   moduleHotkeys: Record<string, string>;
   /** Eco mode: all background services paused, module toggles untouched. */
   ecoMode: boolean;
-  /** Last user-dragged *panel* size (logical px); null until first resize. */
-  launcherSize: { width: number; height: number } | null;
+  /** Legacy single panel size (logical px); the fallback for an unsized view. */
+  launcherSize: WindowSize | null;
+  /**
+   * Last user-dragged size per panel view, keyed by view id — a module id, or
+   * `"settings"`. Absent until that particular view is first dragged.
+   */
+  launcherSizes: Record<string, WindowSize>;
   tools: Record<string, Record<string, unknown>>;
 };
 
@@ -141,10 +149,13 @@ type CommandMap = {
   set_module_pinned: { args: { id: string; pinned: boolean }; result: Config };
   /** Eco mode: pause/resume every background service in one flip. */
   set_eco_mode: { args: { enabled: boolean }; result: Config };
-  /** Persist the size the user dragged a *panel* to (logical px). */
-  set_launcher_size: { args: { width: number; height: number }; result: null };
+  /**
+   * Persist the size the user dragged a *panel* to (logical px), under that
+   * panel's view id — a module id, or `"settings"`.
+   */
+  set_launcher_size: { args: { view: string } & WindowSize; result: null };
   /** Resize the launcher window: grid fit-to-content, or a panel's stored size. */
-  resize_launcher: { args: { width: number; height: number }; result: null };
+  resize_launcher: { args: WindowSize; result: null };
   /** Pin the launcher against click-away dismissal (watchable panels). */
   set_keep_open: { args: { enabled: boolean }; result: null };
 

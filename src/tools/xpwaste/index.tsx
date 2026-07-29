@@ -30,6 +30,9 @@ const xpwaste: ToolModule = {
   // window you're actually focusing in. Esc and the close button still close
   // it — and closing it doesn't stop the clock.
   keepOpen: true,
+  // Narrow on purpose: this one sits on screen beside the window you're
+  // actually working in, so it should take as little of it as it can.
+  panelSize: { width: 620, height: 540 },
   render(ctx) {
     return <XpwastePanel ctx={ctx} />;
   },

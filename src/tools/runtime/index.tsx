@@ -27,6 +27,8 @@ const runtime: ToolModule = {
   ],
   icon: RuntimeIcon,
   kind: "panel",
+  // A ranked list of apps: height carries more rows, width buys nothing.
+  panelSize: { width: 660, height: 560 },
   render(ctx) {
     return <RuntimePanel ctx={ctx} />;
   },

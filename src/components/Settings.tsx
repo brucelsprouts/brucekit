@@ -123,6 +123,7 @@ export function Settings({ disabled, pinned, onToggleModule, onTogglePin }: Prop
       <header className="bk-host__bar">
         <span className="bk-host__title">Settings</span>
         <span className="bk-host__desc">Hotkeys, background work, and modules</span>
+        <span className="bk-host__hint bk-label">[ESC] BACK</span>
       </header>
 
       <div className="bk-settings__body">

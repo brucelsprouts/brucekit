@@ -41,6 +41,8 @@ const glyphs: ToolModule = {
   ],
   icon: GlyphsIcon,
   kind: "panel",
+  // A lookup, not a workspace — open, grab a character, gone.
+  panelSize: { width: 620, height: 500 },
   render(ctx) {
     return <GlyphsPanel ctx={ctx} />;
   },

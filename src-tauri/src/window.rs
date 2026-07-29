@@ -182,6 +182,35 @@ pub fn on_launcher_blur<R: Runtime>(window: &tauri::Window<R>) {
     }
 }
 
+/// Where a window resized about its own centre should sit, kept on screen.
+/// Pure — unit-tested. All physical px; `monitor` is (x, y, width, height).
+///
+/// `set_size` alone keeps the top-left pinned, so every view change threw the
+/// window down and to the right — the grid at 540 opening dcheck at 860 lurched
+/// 320px sideways. Growing about the centre keeps the window where the user put
+/// it, which is what "it didn't move" means to the person watching it.
+///
+/// Clamped to the monitor afterwards, because centring a large panel on a
+/// window already near an edge would otherwise push half of it off-screen. A
+/// window bigger than the monitor pins to the monitor's origin rather than
+/// centring, so its top-left chrome stays reachable.
+pub fn recentred_origin(
+    pos: (i32, i32),
+    old: (u32, u32),
+    new: (u32, u32),
+    monitor: (i32, i32, u32, u32),
+) -> (i32, i32) {
+    let x = pos.0 + (old.0 as i32 - new.0 as i32) / 2;
+    let y = pos.1 + (old.1 as i32 - new.1 as i32) / 2;
+    let (mx, my, mw, mh) = monitor;
+    // `min` before `max` on purpose: when the window is larger than the
+    // monitor the upper bound falls below the lower one, and this ordering
+    // resolves that to the monitor origin instead of panicking in `clamp`.
+    let max_x = mx + mw as i32 - new.0 as i32;
+    let max_y = my + mh as i32 - new.1 as i32;
+    (x.min(max_x).max(mx), y.min(max_y).max(my))
+}
+
 /// Resize the launcher to an explicit logical size, at the webview's request.
 ///
 /// Two callers with two intents. The module grid measures its own content and
@@ -205,11 +234,37 @@ pub fn resize_launcher<R: Runtime>(
     let win = app
         .get_webview_window("launcher")
         .ok_or_else(|| "no launcher window".to_string())?;
+    // Read the frame before resizing so the centre can be put back afterwards.
+    let before = win.outer_position().ok().zip(win.outer_size().ok());
     win.set_size(LogicalSize::new(
         width.clamp(crate::commands::config::MIN_LAUNCHER_W, 4096.0),
         height.clamp(crate::commands::config::MIN_LAUNCHER_H, 4096.0),
     ))
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    // Keep the window centred on where it already was. Best-effort: if any part
+    // of the geometry is unavailable the resize itself has still happened, and
+    // a window that didn't recentre beats one that failed to resize.
+    if let Some((pos, old)) = before {
+        if let (Ok(new), Ok(Some(monitor))) = (win.outer_size(), win.current_monitor()) {
+            let m = (
+                monitor.position().x,
+                monitor.position().y,
+                monitor.size().width,
+                monitor.size().height,
+            );
+            let (x, y) = recentred_origin(
+                (pos.x, pos.y),
+                (old.width, old.height),
+                (new.width, new.height),
+                m,
+            );
+            if (x, y) != (pos.x, pos.y) {
+                let _ = win.set_position(PhysicalPosition::new(x, y));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Show the launcher opened straight into one module (per-module hotkey).
@@ -290,6 +345,56 @@ mod tests {
         // Deep inside the window: our own clicks can't blur, so this is
         // alt-tab — the always-on-top launcher must not linger.
         assert!(!blur_keeps_open((460.0, 340.0), POS, SIZE, 1.0));
+    }
+
+    // A 1920x1080 monitor at the origin.
+    const MON: (i32, i32, u32, u32) = (0, 0, 1920, 1080);
+
+    #[test]
+    fn growing_spends_the_new_size_evenly_on_both_sides() {
+        // The grid (540) opening dcheck (860): +320 wide, split 160 each way,
+        // rather than the whole 320 lurching to the right as set_size alone did.
+        let origin = recentred_origin((700, 300), (540, 400), (860, 620), MON);
+        assert_eq!(origin, (540, 190));
+    }
+
+    #[test]
+    fn shrinking_pulls_in_evenly_from_both_sides() {
+        let origin = recentred_origin((540, 190), (860, 620), (540, 400), MON);
+        assert_eq!(origin, (700, 300));
+    }
+
+    #[test]
+    fn growing_and_shrinking_back_returns_to_the_same_place() {
+        // Round-tripping views must not walk the window across the screen.
+        let start = (700, 300);
+        let grown = recentred_origin(start, (540, 400), (860, 620), MON);
+        assert_eq!(recentred_origin(grown, (860, 620), (540, 400), MON), start);
+    }
+
+    #[test]
+    fn a_window_near_an_edge_is_pulled_back_on_screen() {
+        // Centring a wide panel on a window already at the right edge would
+        // hang it off the monitor; the clamp is what stops that.
+        let origin = recentred_origin((1500, 900), (540, 400), (860, 620), MON);
+        assert_eq!(origin, (1920 - 860, 1080 - 620));
+    }
+
+    #[test]
+    fn a_window_larger_than_its_monitor_pins_to_the_origin() {
+        // Upper bound below the lower one — must resolve to the monitor origin
+        // (top-left chrome reachable) rather than panicking in `clamp`.
+        let origin = recentred_origin((100, 100), (540, 400), (2400, 1400), MON);
+        assert_eq!(origin, (0, 0));
+    }
+
+    #[test]
+    fn a_second_monitor_at_a_negative_offset_keeps_its_own_bounds() {
+        // Monitors left of the primary have negative origins; the clamp has to
+        // follow the monitor the window is actually on, not assume (0, 0).
+        let mon = (-1920, 0, 1920, 1080);
+        let origin = recentred_origin((-1800, 200), (540, 400), (860, 620), mon);
+        assert_eq!(origin, (-1920, 90));
     }
 
     #[test]

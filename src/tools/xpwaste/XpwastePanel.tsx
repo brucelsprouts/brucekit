@@ -233,6 +233,22 @@ export function XpwastePanel({ ctx }: { ctx: ToolContext }) {
     }
   }
 
+  // Esc closes settings back to the timer before the launcher gets to read it
+  // as "leave this module". Capture phase, because the launcher's own Esc
+  // handler is bound to the same window and was bound first — without this,
+  // one key would mean two different things depending on a state the sysbar
+  // doesn't show.
+  useEffect(() => {
+    if (!showSettings) return;
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setShowSettings(false);
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [showSettings]);
+
   const stats = totals(history);
   // The cycle reads as the session you are *on* during focus, and as the count
   // banked during a break — the same reading the original shows.
@@ -246,6 +262,89 @@ export function XpwastePanel({ ctx }: { ctx: ToolContext }) {
       )
     : 0;
   const newestFirst = [...history].reverse();
+
+  // Settings replace the timer rather than unfolding beneath it. Appended, they
+  // pushed the panel past its own height and put the controls you came for
+  // behind a scroll; swapped, the window never changes size and the clock is
+  // one click back. The timer itself keeps running regardless — it lives in
+  // Rust, not in this tree.
+  if (showSettings) {
+    return (
+      <div className="bk-xpw">
+        <div className="bk-xpw__subhead">
+          <button
+            type="button"
+            className="bk-btn bk-btn--sm"
+            onClick={() => setShowSettings(false)}
+            aria-label="Back to the timer"
+          >
+            ◀
+          </button>
+          <span className="bk-label">SETTINGS</span>
+          <span className="bk-xpw__subhint bk-label">[ESC] BACK</span>
+        </div>
+
+        <div className="bk-xpw__settings">
+          <div className="bk-xpw__form">
+            <Field label="FOCUS (M)" value={focusDraft} onChange={setFocusDraft} max={240} />
+            <Field label="SHORT (M)" value={shortDraft} onChange={setShortDraft} max={240} />
+            <Field label="LONG (M)" value={longDraft} onChange={setLongDraft} max={240} />
+            <Field label="CYCLE" value={cycleDraft} onChange={setCycleDraft} max={12} />
+            <Field label="MIN LOG (S)" value={minLogDraft} onChange={setMinLogDraft} max={3600} min={0} />
+            <button type="button" className="bk-btn" onClick={() => void applySettings()}>
+              Apply
+            </button>
+          </div>
+
+          <div className="bk-xpw__form">
+            <span className="bk-label">ALERT</span>
+            <div className="bk-seg" role="group" aria-label="Alert sound">
+              {SOUNDS.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`bk-seg__btn ${sound === s.id ? "is-active" : ""}`}
+                  aria-pressed={sound === s.id}
+                  onClick={() => setSound(s.id)}
+                >
+                  {s.label.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="bk-btn bk-btn--sm" onClick={() => void pickSound()}>
+              Browse…
+            </button>
+            <button
+              type="button"
+              className="bk-btn bk-btn--sm"
+              onClick={() => void ctx.invoke("xpwaste_test_sound").catch(() => {})}
+            >
+              Test
+            </button>
+          </div>
+
+          <p className="bk-xpw__note">
+            {sound === "custom"
+              ? soundFile
+                ? `Plays ${fileName(soundFile)} — falls back to the beep if it goes missing.`
+                : "No file picked yet — the beep stands in until you choose one."
+              : sound === "beep"
+                ? "Windows' own notification chime. Nothing bundled, nothing to license."
+                : "Sessions turn over silently."}
+          </p>
+          <label className="bk-toggle" title="Saved with Apply, like the durations above">
+            <input
+              type="checkbox"
+              checked={skipCounts}
+              onChange={(e) => setSkipCounts(e.target.checked)}
+              aria-label="Skipping a focus session still counts toward the cycle"
+            />
+            <span>Skipping a focus session still counts toward the cycle</span>
+          </label>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bk-xpw">
@@ -416,67 +515,6 @@ export function XpwastePanel({ ctx }: { ctx: ToolContext }) {
           </div>
         )}
       </div>
-
-      {showSettings && (
-        <div className="bk-xpw__settings">
-          <div className="bk-xpw__form">
-            <Field label="FOCUS (M)" value={focusDraft} onChange={setFocusDraft} max={240} />
-            <Field label="SHORT (M)" value={shortDraft} onChange={setShortDraft} max={240} />
-            <Field label="LONG (M)" value={longDraft} onChange={setLongDraft} max={240} />
-            <Field label="CYCLE" value={cycleDraft} onChange={setCycleDraft} max={12} />
-            <Field label="MIN LOG (S)" value={minLogDraft} onChange={setMinLogDraft} max={3600} min={0} />
-            <button type="button" className="bk-btn" onClick={() => void applySettings()}>
-              Apply
-            </button>
-          </div>
-
-          <div className="bk-xpw__form">
-            <span className="bk-label">ALERT</span>
-            <div className="bk-seg" role="group" aria-label="Alert sound">
-              {SOUNDS.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={`bk-seg__btn ${sound === s.id ? "is-active" : ""}`}
-                  aria-pressed={sound === s.id}
-                  onClick={() => setSound(s.id)}
-                >
-                  {s.label.toUpperCase()}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="bk-btn bk-btn--sm" onClick={() => void pickSound()}>
-              Browse…
-            </button>
-            <button
-              type="button"
-              className="bk-btn bk-btn--sm"
-              onClick={() => void ctx.invoke("xpwaste_test_sound").catch(() => {})}
-            >
-              Test
-            </button>
-          </div>
-
-          <p className="bk-xpw__note">
-            {sound === "custom"
-              ? soundFile
-                ? `Plays ${fileName(soundFile)} — falls back to the beep if it goes missing.`
-                : "No file picked yet — the beep stands in until you choose one."
-              : sound === "beep"
-                ? "Windows' own notification chime. Nothing bundled, nothing to license."
-                : "Sessions turn over silently."}
-          </p>
-          <label className="bk-toggle" title="Saved with Apply, like the durations above">
-            <input
-              type="checkbox"
-              checked={skipCounts}
-              onChange={(e) => setSkipCounts(e.target.checked)}
-              aria-label="Skipping a focus session still counts toward the cycle"
-            />
-            <span>Skipping a focus session still counts toward the cycle</span>
-          </label>
-        </div>
-      )}
     </div>
   );
 }

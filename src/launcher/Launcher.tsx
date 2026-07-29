@@ -13,13 +13,19 @@ import { ToolGrid } from "./ToolGrid";
 import { ToolHost } from "./ToolHost";
 import { NavBar } from "./NavBar";
 import { Settings } from "../components/Settings";
+import {
+  declaredSize,
+  isEchoOfCommand,
+  resolvePanelSize,
+  viewKeyFor,
+  type ViewKey,
+  type WindowSize,
+} from "./sizing";
 
 const GRID_COLS = 4;
 
 /** Logical width the module grid sizes itself to: `GRID_COLS` tiles + gutters. */
 const GRID_WIDTH = 540;
-/** Panel size before the user has ever dragged one. */
-const DEFAULT_PANEL_SIZE = { width: 720, height: 520 };
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
@@ -66,7 +72,8 @@ export function Launcher() {
   // while searching, relevance owns the order and a split would just fragment
   // the ranking. Both sections index into `results`, so keyboard nav is one
   // continuous run across them.
-  const pinnedCount = query.trim() ? 0 : results.filter((t) => pinned.includes(t.id)).length;
+  const searching = query.trim() !== "";
+  const pinnedCount = searching ? 0 : results.filter((t) => pinned.includes(t.id)).length;
 
   // Toggled-off modules stay out of the grid; pins order what's left.
   useEffect(() => {
@@ -74,7 +81,8 @@ export function Launcher() {
       .then((cfg) => {
         setDisabled(cfg.disabledModules ?? []);
         setPinned(cfg.pinnedModules ?? []);
-        if (cfg.launcherSize) panelSize.current = cfg.launcherSize;
+        storedSizes.current = cfg.launcherSizes ?? {};
+        legacySize.current = cfg.launcherSize ?? null;
       })
       .catch(() => {
         /* outside a Tauri webview (browser preview) — all modules shown */
@@ -154,13 +162,21 @@ export function Launcher() {
   const atRoot = !settingsOpen && !activeTool;
   // The scrolling module-grid column, measured to size the window to it.
   const sectionsRef = useRef<HTMLDivElement | null>(null);
-  // Same flag, readable from the resize listener — that subscription is set up
-  // once, so it would otherwise close over `atRoot` as it stood on mount.
-  const atRootRef = useRef(atRoot);
-  atRootRef.current = atRoot;
-  // Panel size, mirrored out of config so opening a panel can size the window
-  // synchronously. Kept fresh by the resize listener below.
-  const panelSize = useRef(DEFAULT_PANEL_SIZE);
+  // Which view is on screen: a module id, "settings", or null for the grid.
+  const viewKey = viewKeyFor(settingsOpen, activeTool);
+  // The same value, readable from the resize listener — that subscription is
+  // set up once, so it would otherwise close over the view as it stood on mount.
+  const viewKeyRef = useRef<ViewKey>(viewKey);
+  viewKeyRef.current = viewKey;
+  // Per-view sizes, mirrored out of config so opening a panel can size the
+  // window synchronously — a fresh `get_config` round-trip outlasts the render,
+  // so the panel would paint at the previous view's size and then jump. Kept
+  // fresh by the resize listener below.
+  const storedSizes = useRef<Record<string, WindowSize>>({});
+  const legacySize = useRef<WindowSize | null>(null);
+  // The last size we asked the window manager for, so the resize this provokes
+  // can be told apart from one the user dragged. See `isEchoOfCommand`.
+  const commanded = useRef<WindowSize | null>(null);
 
   // One implementation behind all three back affordances: Esc, mouse button 3,
   // and the ◀ control. Unwinds one level and records what it left for forward.
@@ -316,8 +332,16 @@ export function Launcher() {
   // animation frames don't run. Measuring here reads the layout React has
   // already committed, so the window is the right size before the hotkey ever
   // shows it — rather than snapping to size a frame after it appears.
+  //
+  // Deliberately not re-measured while a search is running. Fitting the window
+  // to the filtered result count meant the grid pulsed as you typed — "col"
+  // shrank it 112px, backspacing grew it back — so the tiles you were aiming at
+  // moved under the cursor, and (since a resize keeps the window centred) the
+  // whole frame breathed around them. At rest the grid is one stable size, and
+  // filtering just empties out the box it already has; the sections column is
+  // the flex child that absorbs the slack, so the footer stays flush.
   useLayoutEffect(() => {
-    if (!atRoot) return;
+    if (!atRoot || searching) return;
     const sections = sectionsRef.current;
     if (!sections) return;
     const kids = Array.from(sections.children);
@@ -332,24 +356,32 @@ export function Launcher() {
     // sees on open, so sit this round out — a later render will measure again.
     if (content <= 0) return;
     const height = Math.ceil(box.top + content + (window.innerHeight - box.bottom));
-    invoke("resize_launcher", { width: GRID_WIDTH, height }).catch(() => {
+    const size = { width: GRID_WIDTH, height };
+    commanded.current = size;
+    invoke("resize_launcher", size).catch(() => {
       /* outside a Tauri webview (browser preview) — nothing to resize */
     });
-  }, [atRoot, results.length, pinnedCount]);
+  }, [atRoot, searching, results.length, pinnedCount]);
 
-  // Opening a panel hands back the size the user last dragged a panel to.
-  // dcheck's graph is meant to be watched while you work in another window, so
-  // panels keep their own dimensions rather than inheriting the grid's.
+  // Opening a panel hands back the size the user last dragged *that* panel to.
   //
-  // Read from the cached ref, not from a fresh `get_config`: that round-trip
-  // outlasts the render, so the panel would paint at the grid's compact size
-  // and then jump.
+  // Per view rather than one size for all of them: dcheck's graph is meant to
+  // be lived in while the glyph picker is a lookup you want small, and a single
+  // shared number meant sizing either one silently re-sized the other. A view
+  // nobody has dragged yet opens at the size its module declares.
   useLayoutEffect(() => {
-    if (atRoot) return;
-    invoke("resize_launcher", panelSize.current).catch(() => {
+    if (!viewKey) return;
+    const size = resolvePanelSize(
+      viewKey,
+      storedSizes.current,
+      declaredSize(viewKey, activeTool),
+      legacySize.current,
+    );
+    commanded.current = size;
+    invoke("resize_launcher", size).catch(() => {
       /* outside a Tauri webview (browser preview) — nothing to resize */
     });
-  }, [atRoot]);
+  }, [viewKey, activeTool]);
 
   // Persist the size the user drags the window to (debounced — the OS streams
   // resize events during the drag). Stored logical so DPI changes don't warp it.
@@ -360,20 +392,30 @@ export function Launcher() {
       const win = getCurrentWindow();
       unlisten = win.onResized(({ payload }) => {
         // Only panels have a size worth remembering. The grid computes its own,
-        // and recording that would overwrite the panel size with a number the
+        // and recording that would overwrite a panel's size with a number the
         // user never chose.
-        if (atRootRef.current) return;
+        if (!viewKeyRef.current) return;
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
+          // Re-read the view at flush time, not at event time: navigating away
+          // inside the debounce window must not file this size under the view
+          // you have since left.
+          const view = viewKeyRef.current;
+          if (!view) return;
           win
             .scaleFactor()
             .then((sf) => {
               const logical = payload.toLogical(sf);
               const size = { width: logical.width, height: logical.height };
-              // Mirror it back so the next panel opens at this size without
+              // Opening a panel resizes the window, and that resize comes back
+              // through this same listener. Only a size the user actually
+              // dragged to is worth a write.
+              if (isEchoOfCommand(size, commanded.current)) return;
+              // Mirror it back so this view reopens at this size without
               // waiting to re-read config.
-              panelSize.current = size;
-              return invoke("set_launcher_size", size);
+              storedSizes.current = { ...storedSizes.current, [view]: size };
+              legacySize.current = size;
+              return invoke("set_launcher_size", { view, ...size });
             })
             .catch(() => {});
         }, 400);
@@ -532,6 +574,9 @@ export function Launcher() {
             <span>[↵] launch</span>
             <span>[↑↓←→] move</span>
             <span>[☆] pin</span>
+            {/* The one place Esc closes rather than goes back. Panels say
+                "[ESC] BACK" in their own header for the same reason. */}
+            <span className="bk-launcher__hint-end">[esc] close</span>
           </footer>
         </>
       )}

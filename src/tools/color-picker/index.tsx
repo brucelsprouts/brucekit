@@ -14,6 +14,11 @@ const colorPicker: ToolModule = {
   keywords: ["color", "colour", "eyedropper", "eyedrop", "pixel", "hex", "rgb", "hsl", "swatch", "picker"],
   icon: ColorIcon,
   kind: "panel",
+  // Sized to the whole panel rather than to an impression of it: the readout
+  // and the picker measure 439px together, over 109px of launcher chrome. An
+  // earlier 440 guess put the sliders below the fold and made you scroll a
+  // panel that has no reason to scroll.
+  panelSize: { width: 560, height: 580 },
   render(ctx) {
     return <ColorPanel ctx={ctx} />;
   },

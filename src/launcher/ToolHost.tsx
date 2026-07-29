@@ -38,7 +38,20 @@ export function ToolHost({ tool, ctx }: Props) {
           <Icon size={15} />
         </span>
         <span className="bk-host__title">{tool.name}</span>
-        {tool.description && <span className="bk-host__desc">{tool.description}</span>}
+        <span className="bk-host__desc">{tool.description ?? ""}</span>
+        {/* Esc means "close" at the grid and "back" here, and until now nothing
+            on screen said which — the footer hint strip that would have
+            explained it only renders at the grid, where there is no ambiguity
+            to explain. */}
+        {tool.keepOpen && (
+          <span
+            className="bk-host__flag bk-label"
+            title="Stays open when you click away, and lets other windows sit over it"
+          >
+            STAYS OPEN
+          </span>
+        )}
+        <span className="bk-host__hint bk-label">[ESC] BACK</span>
       </header>
       <div className="bk-host__body">
         <ErrorBoundary toolId={tool.id}>{body}</ErrorBoundary>

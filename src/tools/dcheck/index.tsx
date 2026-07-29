@@ -18,6 +18,9 @@ const dcheck: ToolModule = {
   // window you're actually testing, so this panel opts out of click-away
   // dismissal. Esc and the close button still close it.
   keepOpen: true,
+  // The widest room of any panel: the graph is the module, and it plots more
+  // history the more horizontal space it gets.
+  panelSize: { width: 860, height: 620 },
   render(ctx) {
     return <DcheckPanel ctx={ctx} />;
   },

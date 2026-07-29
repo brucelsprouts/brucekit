@@ -1,6 +1,8 @@
 //! Config load/save over `tauri-plugin-store`, plus the config-facing commands
 //! (spec §8, §13). The same `config.json` store is shared with the JS side.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Runtime};
@@ -43,11 +45,23 @@ pub struct Config {
     /// Eco mode: every background service paused, module toggles untouched.
     #[serde(default)]
     pub eco_mode: bool,
-    /// Persisted size for the *panel* views (a module, or settings); None until
-    /// the user first resizes one. The module grid is excluded on purpose — it
-    /// fits itself to its content, which changes with the pin count.
+    /// Legacy single panel size, from before sizes were tracked per view.
+    /// Still read (and still written, so a downgrade isn't a cliff) but only
+    /// used as the last-resort fallback for a view with nothing else to go on.
     #[serde(default)]
     pub launcher_size: Option<WindowSize>,
+    /// Persisted size per *panel* view, keyed by view id — a module id, or
+    /// `"settings"`. Absent until the user first drags that particular view.
+    ///
+    /// Per view rather than one number for all of them because the panels want
+    /// genuinely different rooms: dcheck's graph is meant to be lived in, while
+    /// the glyph picker is a lookup you want small and out of the way. Sharing
+    /// one size meant sizing either of them re-sized the other.
+    ///
+    /// The module grid is excluded on purpose — it fits itself to its content,
+    /// which changes with the pin count.
+    #[serde(default)]
+    pub launcher_sizes: BTreeMap<String, WindowSize>,
     pub tools: Map<String, Value>,
 }
 
@@ -61,6 +75,7 @@ impl Default for Config {
             module_hotkeys: Map::new(),
             eco_mode: false,
             launcher_size: None,
+            launcher_sizes: BTreeMap::new(),
             tools: Map::new(),
         }
     }
@@ -104,6 +119,16 @@ pub fn load<R: Runtime>(app: &AppHandle<R>) -> Config {
     }
     if let Some(size) = store.get("launcherSize") {
         cfg.launcher_size = serde_json::from_value(size).ok();
+    }
+    if let Some(sizes) = store.get("launcherSizes") {
+        // A malformed or half-written entry must not take the whole map with
+        // it: drop the bad keys and keep every size that still parses.
+        if let Ok(map) = serde_json::from_value::<Map<String, Value>>(sizes) {
+            cfg.launcher_sizes = map
+                .into_iter()
+                .filter_map(|(k, v)| serde_json::from_value(v).ok().map(|s| (k, s)))
+                .collect();
+        }
     }
     if let Some(Value::Object(tools)) = store.get("tools") {
         cfg.tools = tools;
@@ -150,6 +175,7 @@ pub fn save<R: Runtime>(app: &AppHandle<R>, cfg: &Config) -> Result<(), String> 
     store.set("moduleHotkeys", Value::Object(cfg.module_hotkeys.clone()));
     store.set("ecoMode", json!(cfg.eco_mode));
     store.set("launcherSize", json!(cfg.launcher_size));
+    store.set("launcherSizes", json!(cfg.launcher_sizes));
     store.set("tools", Value::Object(cfg.tools.clone()));
     store.save().map_err(|e| e.to_string())
 }
@@ -216,22 +242,32 @@ pub fn set_eco_mode<R: Runtime>(app: AppHandle<R>, enabled: bool) -> Result<Conf
 }
 
 /// Persist the size the user dragged a *panel* to (logical pixels, debounced
-/// JS-side). The module grid does not go through here: it sizes itself to its
-/// own content, so there is nothing about it worth remembering.
+/// JS-side), under that panel's own view id. The module grid does not go
+/// through here: it sizes itself to its own content, so there is nothing about
+/// it worth remembering.
+///
+/// The legacy scalar is written alongside so a build without per-view sizes
+/// still opens panels at something the user chose rather than at the default.
 #[tauri::command]
 pub fn set_launcher_size<R: Runtime>(
     app: AppHandle<R>,
+    view: String,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
+    if view.trim().is_empty() {
+        return Err("missing view id".into());
+    }
     if !(width.is_finite() && height.is_finite()) {
         return Err("invalid window size".into());
     }
-    let mut cfg = load(&app);
-    cfg.launcher_size = Some(WindowSize {
+    let size = WindowSize {
         width: width.clamp(MIN_LAUNCHER_W, 4096.0),
         height: height.clamp(MIN_LAUNCHER_H, 4096.0),
-    });
+    };
+    let mut cfg = load(&app);
+    cfg.launcher_sizes.insert(view, size);
+    cfg.launcher_size = Some(size);
     save(&app, &cfg)
 }
 
@@ -368,6 +404,10 @@ mod tests {
             module_hotkeys: hotkeys,
             eco_mode: true,
             launcher_size: Some(WindowSize { width: 800.0, height: 520.0 }),
+            launcher_sizes: BTreeMap::from([
+                ("dcheck".to_string(), WindowSize { width: 860.0, height: 620.0 }),
+                ("settings".to_string(), WindowSize { width: 640.0, height: 560.0 }),
+            ]),
             tools,
         };
 
@@ -379,10 +419,24 @@ mod tests {
         assert!(text.contains("moduleHotkeys"));
         assert!(text.contains("ecoMode"));
         assert!(text.contains("launcherSize"));
+        assert!(text.contains("launcherSizes"));
 
         let back: Config = serde_json::from_str(&text).unwrap();
         assert_eq!(cfg, back);
         assert_eq!(back.tools["color-picker"]["format"], json!("hsl"));
+        assert_eq!(back.launcher_sizes["dcheck"].height, 620.0);
+    }
+
+    #[test]
+    fn config_without_launcher_sizes_deserializes_empty() {
+        // Configs written before sizes went per-view carry only the scalar; it
+        // survives as the fallback rather than being dropped on the floor.
+        let back: Config = serde_json::from_str(
+            r#"{"hotkey":"F1","launchOnStartup":false,"launcherSize":{"width":800,"height":600},"tools":{}}"#,
+        )
+        .unwrap();
+        assert!(back.launcher_sizes.is_empty());
+        assert_eq!(back.launcher_size.unwrap().width, 800.0);
     }
 
     #[test]

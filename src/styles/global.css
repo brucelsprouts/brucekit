@@ -325,6 +325,10 @@ code {
   color: var(--bk-fg-faint);
   text-transform: uppercase;
 }
+/* Esc is the one hint that isn't about the grid, so it sits apart from them. */
+.bk-launcher__hint-end {
+  margin-left: auto;
+}
 
 /* ------------------------------------------------------------- search */
 .bk-search {
@@ -534,6 +538,7 @@ code {
   flex-direction: column;
   min-height: 0;
 }
+
 /* Panel header: identity only. Navigation lives in the sysbar chrome, so this
    bar spends its whole width saying what you're looking at. */
 .bk-host__bar {
@@ -565,6 +570,20 @@ code {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Trailing header marks: what Esc does here, and whether this panel is one of
+   the watchable ones. Both stay out of the way of the description, which is
+   the flex child that gives up its width first. */
+.bk-host__hint,
+.bk-host__flag {
+  flex-shrink: 0;
+  color: var(--bk-fg-faint);
+}
+.bk-host__flag {
+  padding: 2px 6px;
+  border: 1px solid var(--bk-line);
+  border-radius: var(--bk-radius);
+  color: var(--bk-fg-dim);
 }
 .bk-host__body,
 .bk-settings__body {
@@ -1572,9 +1591,14 @@ code {
 .bk-dcheck__viewhint {
   margin-left: auto;
 }
+/* The graph is the module, so it takes the window's growth rather than leaving
+   it to the dead space under the stat cards. Tied to viewport height, which in
+   a single-view window is the window height; clamped so it stays legible in a
+   minimum-height window and stops eating the focus log on a tall one. The
+   canvas' ResizeObserver repaints and re-flows the collapsed gaps from here. */
 .bk-dcheck__canvas {
   width: 100%;
-  height: 168px;
+  height: clamp(168px, 38vh, 460px);
   border: 1px solid var(--bk-line);
   border-radius: var(--bk-radius);
   background: var(--bk-bg-elev);
@@ -1976,12 +2000,25 @@ code {
 }
 
 /* settings drawer */
+/* Settings are their own screen inside the module, not a drawer under it, so
+   they get a header of their own rather than a rule separating them from a
+   timer that is no longer on screen. */
+.bk-xpw__subhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--bk-line);
+}
+.bk-xpw__subhint {
+  margin-left: auto;
+  color: var(--bk-fg-faint);
+}
 .bk-xpw__settings {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--bk-line);
 }
 .bk-xpw__form {
   display: flex;

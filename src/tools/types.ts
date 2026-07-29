@@ -36,6 +36,17 @@ export interface ToolModule {
    * hotkey all still close it.
    */
   keepOpen?: boolean;
+  /**
+   * Logical size this panel opens at before the user has ever dragged *it*
+   * (panel tools only). Once dragged, the stored per-module size wins forever.
+   *
+   * Declared by the module rather than inferred, because the right room for a
+   * panel is a property of what it shows: dcheck's graph wants to be lived in,
+   * the glyph picker is a lookup you want small and gone. Omit it and the
+   * panel falls back to the last size any panel was dragged to, then to a
+   * neutral default.
+   */
+  panelSize?: { width: number; height: number };
   /** action tools: run a native flow, no inline UI. */
   activate?: (ctx: ToolContext) => void | Promise<void>;
   /** panel tools: render inline UI hosted by the launcher. */
