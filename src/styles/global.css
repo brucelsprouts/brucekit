@@ -317,6 +317,10 @@ code {
 
 .bk-launcher__hint {
   display: flex;
+  /* The star glyph comes from a fallback font with taller metrics, so without
+     baseline alignment (and a fixed line-height) the pin hint rides low. */
+  align-items: baseline;
+  line-height: 1;
   gap: 16px;
   padding-top: 6px;
   border-top: 1px solid var(--bk-line);
@@ -2315,6 +2319,16 @@ code {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.bk-glyphs__status-alt {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--bk-line);
+  border-radius: 2px;
+  font-size: var(--bk-fs-label);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--bk-fg-dim);
 }
 .bk-glyphs__hint {
   display: flex;

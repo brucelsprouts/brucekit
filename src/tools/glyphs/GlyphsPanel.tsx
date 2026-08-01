@@ -3,6 +3,7 @@ import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { ToolContext } from "../types";
 import { errorMessage } from "../../core/ipc";
 import { ALL_GLYPHS, BY_CHAR, CATEGORIES, type Glyph } from "./data";
+import { altCode, altCodeHint } from "./altcodes";
 import { searchGlyphs } from "./search";
 import { hydrateChars, pushRecent, togglePin } from "./lists";
 
@@ -288,6 +289,7 @@ export function GlyphsPanel({ ctx }: { ctx: ToolContext }) {
           <>
             <span className="bk-glyphs__status-char">{active.label ?? active.c}</span>
             <span className="bk-glyphs__status-name">{active.name}</span>
+            <AltCodeTag glyph={active} />
           </>
         ) : (
           <span className="bk-glyphs__status-name">—</span>
@@ -300,6 +302,23 @@ export function GlyphsPanel({ ctx }: { ctx: ToolContext }) {
         <span className="bk-label">TAB CATEGORY</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * The highlighted character's Windows numpad code, when it has one.
+ *
+ * Renders nothing rather than "—" for the many characters that have none: an
+ * absent tag reads as "not applicable", while a dash in a fixed slot invites
+ * you to keep glancing at a field that is empty most of the time.
+ */
+function AltCodeTag({ glyph }: { glyph: Glyph }) {
+  const code = altCode(glyph.c);
+  if (code === null) return null;
+  return (
+    <span className="bk-glyphs__status-alt" title={altCodeHint(code)}>
+      ALT&nbsp;{code.digits}
+    </span>
   );
 }
 
@@ -324,6 +343,8 @@ type CellProps = {
  * from the grid, not just from the rail.
  */
 function GlyphCell({ glyph, index, selected, pinned, onCopy, onPin, onHover }: CellProps) {
+  const code = altCode(glyph.c);
+  const title = code === null ? glyph.name : `${glyph.name} · Alt ${code.digits}`;
   return (
     <div
       className="bk-glyphs__cell"
@@ -338,7 +359,7 @@ function GlyphCell({ glyph, index, selected, pinned, onCopy, onPin, onHover }: C
         type="button"
         className="bk-glyphs__hit"
         aria-label={glyph.name}
-        title={glyph.name}
+        title={title}
         tabIndex={-1}
         onClick={onCopy}
       >
