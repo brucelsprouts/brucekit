@@ -110,16 +110,29 @@ pub fn sample_interval_from_tools(tools: &serde_json::Map<String, Value>) -> u64
 /// has focus (secure desktop, lock screen) — those slices go untracked.
 #[cfg(windows)]
 pub fn foreground_app() -> Option<String> {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    unsafe { window_app(GetForegroundWindow()) }
+}
+
+#[cfg(not(windows))]
+pub fn foreground_app() -> Option<String> {
+    None
+}
+
+/// Name of the app that owns `hwnd`; None for a null window or a process we
+/// aren't allowed to query.
+#[cfg(windows)]
+pub fn window_app(hwnd: windows::Win32::Foundation::HWND) -> Option<String> {
     use windows::core::PWSTR;
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
 
     unsafe {
-        let hwnd = GetForegroundWindow();
         if hwnd.0.is_null() {
             return None;
         }
@@ -139,11 +152,6 @@ pub fn foreground_app() -> Option<String> {
         let name = friendly_app_name(&path);
         (!name.is_empty()).then_some(name)
     }
-}
-
-#[cfg(not(windows))]
-pub fn foreground_app() -> Option<String> {
-    None
 }
 
 // ─── Usage persistence ───────────────────────────────────────────────────────

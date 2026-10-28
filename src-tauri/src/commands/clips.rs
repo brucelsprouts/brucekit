@@ -138,6 +138,8 @@ pub struct ClipsConfig {
     pub excluded_apps: Vec<String>,
     /// Honor the Windows clipboard markers apps use to opt out of history.
     pub honor_sensitive: bool,
+    /// Drop text that looks like a generated password (see `looks_like_password`).
+    pub skip_password_like: bool,
     /// Record copied images. Off keeps the history text-only — no PNGs on disk.
     pub capture_images: bool,
 }
@@ -148,6 +150,7 @@ impl Default for ClipsConfig {
             max_history: DEFAULT_MAX_HISTORY,
             excluded_apps: DEFAULT_EXCLUDED_APPS.iter().map(|s| s.to_string()).collect(),
             honor_sensitive: true,
+            skip_password_like: true,
             capture_images: true,
         }
     }
@@ -174,6 +177,9 @@ pub fn clips_config_from_tools(tools: &serde_json::Map<String, Value>) -> ClipsC
     }
     if let Some(Value::Bool(honor)) = ns.get("honorSensitive") {
         cfg.honor_sensitive = *honor;
+    }
+    if let Some(Value::Bool(skip)) = ns.get("skipPasswordLike") {
+        cfg.skip_password_like = *skip;
     }
     if let Some(Value::Bool(images)) = ns.get("captureImages") {
         cfg.capture_images = *images;
@@ -216,9 +222,16 @@ pub fn clipboard_is_sensitive() -> bool {
     use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
 
     unsafe {
-        let exclude = RegisterClipboardFormatW(w!("ExcludeClipboardContentFromMonitorProcessing"));
-        if exclude != 0 && IsClipboardFormatAvailable(exclude).is_ok() {
-            return true;
+        // The second marker is the older convention KeePass (and the clipboard
+        // viewers it was written for) still use.
+        for marker in [
+            w!("ExcludeClipboardContentFromMonitorProcessing"),
+            w!("Clipboard Viewer Ignore"),
+        ] {
+            let fmt = RegisterClipboardFormatW(marker);
+            if fmt != 0 && IsClipboardFormatAvailable(fmt).is_ok() {
+                return true;
+            }
         }
 
         let history = RegisterClipboardFormatW(w!("CanIncludeInClipboardHistory"));
@@ -246,6 +259,58 @@ pub fn clipboard_is_sensitive() -> bool {
 #[cfg(not(windows))]
 pub fn clipboard_is_sensitive() -> bool {
     false
+}
+
+/// The app that actually wrote the clipboard. The foreground app is only a
+/// guess made up to 800 ms later: copy a password, alt-tab to the login form,
+/// and the poll sees the browser. The owner window doesn't move.
+#[cfg(windows)]
+fn clipboard_owner_app() -> Option<String> {
+    use windows::Win32::System::DataExchange::GetClipboardOwner;
+    super::runtime::window_app(unsafe { GetClipboardOwner() }.ok()?)
+}
+
+#[cfg(not(windows))]
+fn clipboard_owner_app() -> Option<String> {
+    None
+}
+
+// ─── Password-shaped text ────────────────────────────────────────────────────
+
+/// Shortest and longest strings treated as a possible password. Generators
+/// default to 14–20 characters; past the ceiling it's a token or a blob.
+const PASSWORD_MIN_CHARS: usize = 10;
+const PASSWORD_MAX_CHARS: usize = 128;
+
+/// Whether `text` reads like a generated password: one unbroken run of
+/// upper-case, lower-case and a digit, which natural text and identifiers
+/// rarely combine (pure; unit-tested).
+///
+/// This is the net for copies that carry no marker and come from no listed app
+/// — a password-manager browser extension copies as the browser itself. It
+/// errs toward skipping: a missed clip costs a re-copy, a recorded password
+/// sits in plaintext on disk. URLs and Windows paths are let through, since
+/// they match the shape without being secrets.
+pub fn looks_like_password(text: &str) -> bool {
+    let len = text.chars().count();
+    if !(PASSWORD_MIN_CHARS..=PASSWORD_MAX_CHARS).contains(&len)
+        || text.chars().any(char::is_whitespace)
+    {
+        return false;
+    }
+    let drive_path = {
+        let mut chars = text.chars();
+        matches!(
+            (chars.next(), chars.next(), chars.next()),
+            (Some(d), Some(':'), Some('\\' | '/')) if d.is_ascii_alphabetic()
+        )
+    };
+    if text.contains("://") || text.starts_with("www.") || drive_path {
+        return false;
+    }
+    text.chars().any(char::is_uppercase)
+        && text.chars().any(char::is_lowercase)
+        && text.chars().any(|c| c.is_ascii_digit())
 }
 
 // ─── Formatted text (CF_HTML) ────────────────────────────────────────────────
@@ -618,7 +683,11 @@ fn capture_allowed(cfg: &ClipsConfig) -> bool {
     if cfg.honor_sensitive && clipboard_is_sensitive() {
         return false;
     }
-    !is_excluded(super::runtime::foreground_app().as_deref(), &cfg.excluded_apps)
+    // Either app counting is deliberate: the owner is who wrote the clipboard,
+    // the foreground is who the user was in (a launcher hotkey, a helper process).
+    ![clipboard_owner_app(), super::runtime::foreground_app()]
+        .iter()
+        .any(|app| is_excluded(app.as_deref(), &cfg.excluded_apps))
 }
 
 /// Reserve the next clip id. Ids issued to a capture that is then rejected are
@@ -679,7 +748,7 @@ fn capture_text<R: Runtime>(
     // switches away from the password manager without copying again.
     *last_seen = Some(text.clone());
 
-    if !capture_allowed(cfg) {
+    if !capture_allowed(cfg) || (cfg.skip_password_like && looks_like_password(&text)) {
         return false;
     }
     let fingerprint = fingerprint_text(&text);
@@ -1154,6 +1223,42 @@ mod tests {
         // for the common case.
         let text = serde_json::to_string(&clip(1, false, 42)).unwrap();
         assert!(!text.contains("html") && !text.contains("image"), "got {text}");
+    }
+
+    #[test]
+    fn generated_passwords_are_recognized() {
+        for pw in ["xK9mPq2vLw7Rtn4B", "Tr0ub4dor3Horse", "aB3$kL9#mN2@pQ7!", "ghp_A1b2C3d4E5f6G7h8"] {
+            assert!(looks_like_password(pw), "{pw} should be skipped");
+        }
+    }
+
+    #[test]
+    fn ordinary_text_is_not_mistaken_for_a_password() {
+        for text in [
+            "hello world",                      // whitespace
+            "correct-horse-battery-staple",     // no digit, no capital
+            "d41d8cd98f00b204e9800998ecf8427e", // hex digest: no capitals
+            "550e8400-e29b-41d4-a716-446655440000", // uuid
+            "short1A",                          // under the minimum
+            "https://Example.com/Page1",        // url
+            "www.Example.com/Page1",
+            "C:\\Users\\Bruce\\file2.txt",      // windows path
+            "Line one\nLine two 2",
+        ] {
+            assert!(!looks_like_password(text), "{text:?} should be recorded");
+        }
+        assert!(!looks_like_password(&"aB3".repeat(50)), "past the ceiling it's a blob, not a password");
+    }
+
+    #[test]
+    fn clips_config_reads_the_password_shape_toggle() {
+        assert!(
+            clips_config_from_tools(&serde_json::Map::new()).skip_password_like,
+            "on unless the user says otherwise"
+        );
+        let mut tools = serde_json::Map::new();
+        tools.insert(MODULE_ID.to_string(), serde_json::json!({ "skipPasswordLike": false }));
+        assert!(!clips_config_from_tools(&tools).skip_password_like);
     }
 
     #[test]

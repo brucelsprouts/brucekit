@@ -30,6 +30,8 @@ export type ClipsSettings = {
   maxHistory: number;
   excludedApps: string[];
   honorSensitive: boolean;
+  /** Skip text shaped like a generated password; mirrors `looks_like_password` in clips.rs. */
+  skipPasswordLike: boolean;
   /** Record copied pictures too. Off keeps the history text-only. */
   captureImages: boolean;
 };

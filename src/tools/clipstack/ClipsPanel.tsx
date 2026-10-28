@@ -52,6 +52,7 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
   const [unlimited, setUnlimited] = useState(false);
   const [excludedDraft, setExcludedDraft] = useState(formatExcludedApps(DEFAULT_EXCLUDED_APPS));
   const [honorSensitive, setHonorSensitive] = useState(true);
+  const [skipPasswordLike, setSkipPasswordLike] = useState(true);
   const [captureImages, setCaptureImages] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -74,9 +75,10 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
       ctx.settings.get<number>("maxHistory", DEFAULT_MAX_HISTORY),
       ctx.settings.get<string[]>("excludedApps", DEFAULT_EXCLUDED_APPS),
       ctx.settings.get<boolean>("honorSensitive", true),
+      ctx.settings.get<boolean>("skipPasswordLike", true),
       ctx.settings.get<boolean>("captureImages", true),
     ])
-      .then(([max, apps, honor, images]) => {
+      .then(([max, apps, honor, passwordLike, images]) => {
         if (!alive) return;
         setUnlimited(max === 0);
         // Keep the last real number in the box so unticking Unlimited restores
@@ -84,6 +86,7 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
         if (max !== 0) setMaxDraft(String(max));
         setExcludedDraft(formatExcludedApps(apps));
         setHonorSensitive(honor);
+        setSkipPasswordLike(passwordLike);
         setCaptureImages(images);
       })
       .catch(() => {});
@@ -190,6 +193,7 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
       await ctx.settings.set("maxHistory", maxHistory);
       await ctx.settings.set("excludedApps", excludedApps);
       await ctx.settings.set("honorSensitive", honorSensitive);
+      await ctx.settings.set("skipPasswordLike", skipPasswordLike);
       await ctx.settings.set("captureImages", captureImages);
       // Apply the new cap to what's already stored, then show the result.
       const kept = await ctx.invoke("clips_apply_limit");
@@ -429,6 +433,19 @@ export function ClipsPanel({ ctx }: { ctx: ToolContext }) {
               aria-label="Skip clips marked sensitive"
             />
             <span>Skip copies apps mark as sensitive</span>
+          </label>
+
+          <label
+            className="bk-toggle"
+            title="Catches password-manager browser extensions, which copy as the browser"
+          >
+            <input
+              type="checkbox"
+              checked={skipPasswordLike}
+              onChange={(e) => setSkipPasswordLike(e.target.checked)}
+              aria-label="Skip text that looks like a password"
+            />
+            <span>Skip text that looks like a password</span>
           </label>
 
           <label className="bk-toggle" title="Copied pictures are saved as PNGs beside clips.json">
