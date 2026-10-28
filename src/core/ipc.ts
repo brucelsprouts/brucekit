@@ -190,6 +190,8 @@ type CommandMap = {
   /** runtime: per-app screen time — current session + the previous run's. */
   runtime_apps: { args: void; result: AppUsage };
 
+  /** xpwaste: show (or create) the timer's own window and bring it forward. */
+  open_xpwaste_window: { args: void; result: null };
   /** xpwaste: the timer as it stands. Every control below returns it too. */
   xpwaste_state: { args: void; result: TimerSnapshot };
   /** Start or resume. A no-op while the service is stopped (module off / eco). */

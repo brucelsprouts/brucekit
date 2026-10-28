@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the launcher and overlay windows.",
-  "windows": ["launcher", "overlay"],
+  "description": "Permissions for the launcher, overlay and xpwaste windows.",
+  "windows": ["launcher", "overlay", "xpwaste"],
   "permissions": [
     "core:default",
     "core:window:allow-show",

@@ -39,9 +39,11 @@ const DEFAULTS = {
 
 /**
  * xpwaste panel: the pomodoro timer from github.com/brucelsprouts/xpwaste,
- * rebuilt on brucekit's HUD vocabulary — the ring, the ranked-row list, the
- * segmented control and the hairline stat cards this app already speaks in,
- * instead of the original's themed Qt chrome.
+ * rebuilt on brucekit's HUD vocabulary — the ring, the ranked-row list and the
+ * segmented control this app already speaks in, instead of the original's
+ * themed Qt chrome. It fills its own window (`XpwasteWindow`), and lays itself
+ * out from that window's size: the dial takes what the controls leave, the
+ * stat strip stays one line, and the log appears once there is room for it.
  *
  * The panel deliberately owns no clock. Every control round-trips to Rust and
  * renders the snapshot it gets back, and the tick thread pushes one per second
@@ -116,6 +118,21 @@ export function XpwastePanel({ ctx }: { ctx: ToolContext }) {
       alive = false;
     };
   }, [ctx]);
+
+  // The window is hidden, not destroyed, when it's closed, so it can wake up
+  // having missed a completed session. Pulling fresh state on focus is cheaper
+  // than trusting that a hidden webview kept up.
+  useEffect(() => {
+    function onFocus() {
+      ctx
+        .invoke("xpwaste_state")
+        .then(setTimer)
+        .catch(() => {});
+      void loadHistory();
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [ctx, loadHistory]);
 
   // The tick thread pushes a snapshot whenever the display second changes; a
   // completed session also lands here, so the log refreshes without polling.
@@ -270,7 +287,7 @@ export function XpwastePanel({ ctx }: { ctx: ToolContext }) {
   // Rust, not in this tree.
   if (showSettings) {
     return (
-      <div className="bk-xpw">
+      <div className="bk-xpw bk-xpw--scroll">
         <div className="bk-xpw__subhead">
           <button
             type="button"
@@ -560,9 +577,9 @@ function Ring({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bk-dstat">
+    <div className="bk-xpw__stat">
+      <strong>{value}</strong>
       <span className="bk-label">{label}</span>
-      <strong className="bk-dstat__val">{value}</strong>
     </div>
   );
 }

@@ -1738,32 +1738,45 @@ code {
 
 
 /* ------------------------------------------------------ xpwaste panel */
+/* xpwaste lives in its own native window (see window::open_xpwaste_window), so
+   this shell stands in for the launcher chrome it no longer sits inside. The
+   window is opaque and decorated — the OS title bar is the drag handle and the
+   minimise button — which is why it paints its own background where the
+   launcher leaves that to a transparent webview. */
+.bk-xpwin {
+  height: 100%;
+  padding: 14px;
+  background: var(--bk-bg);
+}
 .bk-xpw {
   display: flex;
   flex-direction: column;
   /* Tighter than the other panels on purpose: this one is a hierarchy, not a
      list of equals. The clock earns the room the gaps used to spend. */
   gap: 10px;
-  min-height: 100%;
+  height: 100%;
+  /* Layout below is decided by the window's size, not the viewport's, so the
+     same rules hold wherever the panel is hosted. */
+  container: xpw / size;
 }
-/* The clock and its controls, as one block. It takes the slack and centres in
-   it, so a tall window spends its extra height on the thing you opened the
-   module for instead of pushing a void into the middle of the panel. */
+/* Settings is a form, not a dial: it scrolls rather than squeezing. */
+.bk-xpw--scroll {
+  overflow-y: auto;
+  container-type: normal;
+}
+/* The clock and its controls, as one block. The clock takes every pixel the
+   rows around it leave, so a taller window is a bigger dial. */
 .bk-xpw__hero {
-  /* The clock and the log share the window's spare height rather than one of
-     them hogging it and stranding the other — but the split is lopsided on
-     purpose. A taller window is a request for a bigger clock; the log only
-     needs enough room to stop looking cut off. */
-  flex: 5 1 0;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 10px;
 }
 .bk-xpw__phases {
   align-self: center;
+  flex: 0 0 auto;
 }
 
 /* The clock: ring and face share one grid cell, so the countdown sits dead
@@ -1771,27 +1784,22 @@ code {
    Both scale with the window — drag the panel taller and the countdown is what
    grows, because it's the thing you're reading from across the room. */
 .bk-xpw__clock {
-  /* The dial takes the height the hero has left and stays square, rather than
-     being pinned to a number the window knows nothing about. Everything inside
-     is then measured against the dial itself (cq units below), so the readout
-     keeps the same air around it whatever size the box ends up. */
-  flex: 1 1 auto;
-  min-height: 128px;
-  /* Past this it stops being a clock and starts being a wall. The slack goes
-     to the log instead. */
-  max-height: 460px;
-  aspect-ratio: 1;
+  /* The box takes whatever the hero has left in both directions; the dial
+     inside is the largest square that fits it. Sizing the box by one axis and
+     deriving the other (an aspect-ratio) is what let a narrow window squeeze
+     the dial to a coin — now the shorter side decides, and nothing else. */
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
   container-type: size;
   position: relative;
   display: grid;
   place-items: center;
-  align-self: center;
-  margin: 2px 0;
 }
 .bk-xpw__ring {
   grid-area: 1 / 1;
-  width: 100%;
-  height: 100%;
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
   /* Twelve o'clock start, draining clockwise — a clock face, not a chart. */
   transform: rotate(-90deg);
 }
@@ -1827,14 +1835,14 @@ code {
   /* Keeps the face clear of the arc it sits inside — the ring's inner edge is
      about 80% of the dial, and a readout that runs up to it reads as a number
      jammed in a circle rather than one framed by it. */
-  max-width: 68cqw;
+  max-width: 68cqmin;
 }
 .bk-xpw__time {
   font-weight: 600;
   /* Measured against the dial, not the viewport: five monospace figures run
      about 3em wide, so this lands the readout at ~62% of the dial and leaves
      the rest as air on both sides at every size. */
-  font-size: 20.5cqh;
+  font-size: 20.5cqmin;
   line-height: 1;
   white-space: nowrap;
   letter-spacing: 0.01em;
@@ -1845,7 +1853,7 @@ code {
 /* Past 100 minutes the readout grows a sixth figure, which would run into the
    arc on a small dial. Step the type down so the frame holds instead. */
 .bk-xpw__time.is-long {
-  font-size: 16.8cqh;
+  font-size: 16.8cqmin;
 }
 
 /* cycle row: the pips are the count, the label spells it out */
@@ -1854,6 +1862,7 @@ code {
   align-items: center;
   justify-content: center;
   gap: 10px;
+  flex: 0 0 auto;
 }
 .bk-xpw__pips {
   display: flex;
@@ -1878,44 +1887,98 @@ code {
   justify-content: center;
   gap: 8px;
   width: 100%;
+  flex: 0 0 auto;
 }
 .bk-xpw__controls > .bk-btn,
 .bk-xpw__controls > .bk-action {
   flex: 1 1 0;
+  min-width: 0;
   max-width: 116px;
-  padding: 9px 10px;
+  padding: 9px 6px;
   font-size: var(--bk-fs-sm);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-/* Today's numbers are context, not the headline — same cards dcheck uses, sized
-   down so they read as a footnote to the clock rather than a second subject. */
+/* Today's numbers are context, not the headline. One hairline-topped strip of
+   three, value over label — not three bordered cards, which cost more height
+   than the whole control row did and were the first thing to crowd the dial. */
 .bk-xpw__stats {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bk-line);
 }
-.bk-xpw__stats .bk-dstat {
-  gap: 3px;
-  padding: 7px 10px;
+.bk-xpw__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
 }
-.bk-xpw__stats .bk-dstat__val {
+.bk-xpw__stat strong {
+  font-weight: 600;
   font-size: var(--bk-fs-base);
+  color: var(--bk-fg);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.bk-xpw__stat .bk-label {
+  white-space: nowrap;
 }
 
-/* focus log — takes whatever height is left, so a tall window feeds the list
-   instead of stranding a block of nothing under it. */
+/* focus log — a tall window's extra, not a fixture. It takes a slice of the
+   height and only shows once there is height to spare (see the container
+   queries below); the dial gets first call on every pixel before that. */
 .bk-xpw__logwrap {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
+  height: clamp(112px, 26cqh, 260px);
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-/* An empty log claims no room at all — the clock above takes it instead. */
+/* An empty log claims no room at all. */
 .bk-xpw__logwrap.is-empty {
-  flex: 0 0 auto;
+  height: auto;
+}
+
+/* Compaction, driven by the window's own size. Order matters: each step only
+   gives up what the dial can't spare. */
+@container xpw (max-height: 539px) {
+  /* The log needs a window that's tall enough to show a few rows. Below that
+     it's a cramped strip stealing from the clock, so it steps aside. */
+  .bk-xpw__logwrap {
+    display: none;
+  }
+}
+@container xpw (max-height: 400px) {
+  .bk-xpw,
+  .bk-xpw__hero {
+    gap: 8px;
+  }
+  /* The pips already say it; the words are the first thing to go. */
+  .bk-xpw__cycle > .bk-label {
+    display: none;
+  }
+  .bk-xpw__stats {
+    padding-top: 6px;
+    gap: 4px;
+  }
+}
+@container xpw (max-width: 359px) {
+  .bk-xpw__controls {
+    gap: 5px;
+  }
+  .bk-xpw__controls > .bk-btn,
+  .bk-xpw__controls > .bk-action {
+    padding: 8px 2px;
+    letter-spacing: 0.02em;
+  }
+  .bk-xpw__phases .bk-seg__btn {
+    padding-inline: 8px;
+  }
 }
 .bk-xpw__logscroll {
   flex: 1;

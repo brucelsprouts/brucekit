@@ -46,6 +46,47 @@ pub fn ensure_overlay<R: Runtime>(app: &AppHandle<R>) -> Result<WebviewWindow<R>
     }
 }
 
+/// Label of the xpwaste timer window.
+pub const XPWASTE_LABEL: &str = "xpwaste";
+
+/// Show the xpwaste timer in a window of its own, creating it on first use.
+///
+/// Unlike the launcher this is an ordinary window: decorated, resizable, in the
+/// taskbar, not always-on-top, so it can be moved beside the work, minimised and
+/// alt-tabbed like anything else. Closing it only hides it (see the window event
+/// handler in `lib.rs`), so a second call restores the same window at the size
+/// and position it was left at.
+///
+/// `async` because building a window from a synchronous command deadlocks on
+/// Windows.
+#[tauri::command]
+pub async fn open_xpwaste_window<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(XPWASTE_LABEL) {
+        // Minimised windows ignore show()/set_focus() until restored.
+        let _ = win.unminimize();
+        win.show().map_err(|e| e.to_string())?;
+        win.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(&app, XPWASTE_LABEL, WebviewUrl::App("index.html".into()))
+        .title("xpwaste")
+        .inner_size(400.0, 500.0)
+        // Small enough to tuck into a corner, large enough that the controls
+        // row and the dial still fit (the layout compacts itself to this).
+        .min_inner_size(300.0, 300.0)
+        .resizable(true)
+        .decorations(true)
+        .always_on_top(false)
+        .skip_taskbar(false)
+        // The app is dark throughout; a white native title bar over it is the
+        // one thing that would look unfinished.
+        .theme(Some(tauri::Theme::Dark))
+        .center()
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Show the overlay sized to exactly cover `monitor`, then signal the webview.
 ///
 /// The window (and its React tree) is reused across captures, so after every

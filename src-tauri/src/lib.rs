@@ -38,13 +38,22 @@ pub fn run() {
         // Click-away dismiss lives here (not JS) so a blur can be forgiven
         // when the cursor shows it's really a resize or header-drag grab —
         // the native size/move loop blips focus exactly like a click-away.
-        .on_window_event(|window, event| {
-            if window.label() != "launcher" {
-                return;
+        .on_window_event(|window, event| match window.label() {
+            "launcher" => {
+                if matches!(event, tauri::WindowEvent::Focused(false)) {
+                    window::on_launcher_blur(window);
+                }
             }
-            if matches!(event, tauri::WindowEvent::Focused(false)) {
-                window::on_launcher_blur(window);
+            // The timer window hides instead of closing: the clock lives in
+            // Rust, and keeping the webview means reopening is instant and
+            // lands at the size and spot the user left it.
+            window::XPWASTE_LABEL => {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
+            _ => {}
         })
         .setup(|app| {
             let handle = app.handle().clone();
@@ -93,6 +102,7 @@ pub fn run() {
             commands::config::set_launcher_size,
             window::resize_launcher,
             window::set_keep_open,
+            window::open_xpwaste_window,
             commands::clips::clips_list,
             commands::clips::clips_copy,
             commands::clips::clips_image,
